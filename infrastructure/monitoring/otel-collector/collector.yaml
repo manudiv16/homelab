@@ -13,7 +13,6 @@ spec:
       memory: 128Mi
     limits:
       memory: 512Mi
-  # Host network not required; filelog reads hostPath volume
   volumes:
     - name: varlogpods
       hostPath:
@@ -30,21 +29,19 @@ spec:
     - name: varlog
       mountPath: /var/log
       readOnly: true
-  config: |
+  config:
     receivers:
       hostmetrics:
         collection_interval: 30s
         scrapers:
-          cpu:
-          memory:
-          disk:
-          network:
+          cpu: null
+          memory: null
+          disk: null
+          network: null
       kubeletstats:
         collection_interval: 30s
         auth_type: serviceAccount
-        endpoint: "${env:K8S_NODE_NAME}:10250"
-        # Insecure for homelab — kubelet on LXC does not have valid cert
-        # for the node IP. serviceAccount auth still validates the token.
+        endpoint: ${env:K8S_NODE_NAME}:10250
         insecure_skip_verify: true
       filelog:
         include:
@@ -57,7 +54,6 @@ spec:
             id: move_body
             from: attributes.log
             to: body
-
     processors:
       memory_limiter:
         check_interval: 5s
@@ -79,23 +75,34 @@ spec:
           - key: cluster.name
             value: homelab
             action: upsert
-
     exporters:
       otlp:
-        endpoint: "otel-gateway-collector:4317"
+        endpoint: otel-gateway-collector:4317
         tls:
           insecure: true
-
     service:
       pipelines:
         metrics:
-          receivers: [hostmetrics, kubeletstats]
-          processors: [memory_limiter, k8sattributes, resource/cluster, batch]
-          exporters: [otlp]
+          receivers:
+            - hostmetrics
+            - kubeletstats
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resource/cluster
+            - batch
+          exporters:
+            - otlp
         logs:
-          receivers: [filelog]
-          processors: [memory_limiter, k8sattributes, resource/cluster, batch]
-          exporters: [otlp]
+          receivers:
+            - filelog
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resource/cluster
+            - batch
+          exporters:
+            - otlp
       telemetry:
         metrics:
-          address: "0.0.0.0:8888"
+          address: 0.0.0.0:8888

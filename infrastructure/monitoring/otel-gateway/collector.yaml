@@ -14,7 +14,6 @@ spec:
       memory: 256Mi
     limits:
       memory: 1Gi
-  # TargetAllocator configuration for annotation-driven pod scrape
   targetAllocator:
     enabled: true
     image: ghcr.io/open-telemetry/opentelemetry-operator/target-allocator:0.122.0
@@ -25,10 +24,9 @@ spec:
         memory: 64Mi
       limits:
         memory: 128Mi
-    # Discover pods with prometheus.io/scrape: "true" annotations
     prometheusCR:
       enabled: true
-  config: |
+  config:
     receivers:
       otlp:
         protocols:
@@ -36,14 +34,11 @@ spec:
             endpoint: 0.0.0.0:4317
           http:
             endpoint: 0.0.0.0:4318
-      # The prometheus receiver scrape config is managed by the TargetAllocator.
-      # The placeholder job definition is replaced with dynamic targets at runtime.
       prometheus:
         config:
           scrape_configs:
-            - job_name: 'otel-gateway'
+            - job_name: otel-gateway
               scrape_interval: 30s
-
     processors:
       memory_limiter:
         check_interval: 5s
@@ -65,29 +60,34 @@ spec:
           - key: cluster.name
             value: homelab
             action: upsert
-
     exporters:
       fluentforward:
-        endpoint: "fluentbit-aggregator:24224"
+        endpoint: fluentbit-aggregator:24224
       prometheusremotewrite:
-        endpoint: "http://192.168.4.79:9090/api/v1/write"
-        # No auth for homelab simplicity. Prometheus is on a trusted LAN.
-        # If basic auth is enabled on Prometheus, add:
-        #   auth:
-        #     authenticator: basicauth/prw
-        # tls:
-        #   insecure: true
-
+        endpoint: http://192.168.4.79:9090/api/v1/write
     service:
       pipelines:
         metrics:
-          receivers: [otlp, prometheus]
-          processors: [memory_limiter, k8sattributes, resource/cluster, batch]
-          exporters: [prometheusremotewrite]
+          receivers:
+            - otlp
+            - prometheus
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resource/cluster
+            - batch
+          exporters:
+            - prometheusremotewrite
         logs:
-          receivers: [otlp]
-          processors: [memory_limiter, k8sattributes, resource/cluster, batch]
-          exporters: [fluentforward]
+          receivers:
+            - otlp
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resource/cluster
+            - batch
+          exporters:
+            - fluentforward
       telemetry:
         metrics:
-          address: "0.0.0.0:8888"
+          address: 0.0.0.0:8888
