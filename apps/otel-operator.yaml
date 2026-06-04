@@ -14,8 +14,7 @@ spec:
     # Using the pre-built release manifest avoids this issue entirely.
     repoURL: https://github.com/manudiv16/homelab.git
     targetRevision: main
-    path: apps/otel-operator
-    kustomize: {}
+    path: infrastructure/otel-operator-manifest
   destination:
     server: https://kubernetes.default.svc
     namespace: opentelemetry-operator-system
