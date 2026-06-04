@@ -52,8 +52,6 @@ data:
         # Buffering: flush every 5MB or every 5 minutes
         total_file_size       5M
         upload_timeout        5m
-        # Storage: use filesystem buffering for durability
-        storage.type          filesystem
         # S3 credentials from environment (injected via Secret)
         # FLUENT_S3_ACCESS_KEY_ID and FLUENT_S3_SECRET_ACCESS_KEY
         # are read from the environment automatically by the S3 plugin
