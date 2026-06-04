@@ -7,7 +7,7 @@ data:
   fluent-bit.conf: |
     # ==============================================================
     # Fluentbit Aggregator Configuration
-    # Receives logs from OTel Gateway via Fluent Forward
+    # Receives logs from OTel Gateway via OpenTelemetry protocol
     # Writes Parquet files to Garage (S3) with Hive partitioning
     # ==============================================================
 
@@ -26,12 +26,12 @@ data:
         storage.checksum          off
         storage.backlog.mem_limit 50M
 
-    # ---- Input: Fluent Forward from OTel Gateway ----
+    # ---- Input: OpenTelemetry from OTel Gateway ----
     [INPUT]
-        Name              forward
+        Name              opentelemetry
         Listen            0.0.0.0
-        Port              24224
-        Tag               logs.*
+        Port              4318
+        # Buffer settings for OTLP HTTP
         Buffer_Chunk_Size 1M
         Buffer_Max_Size   5M
 
@@ -53,8 +53,6 @@ data:
         total_file_size       5M
         upload_timeout        5m
         # S3 credentials from environment (injected via Secret)
-        # FLUENT_S3_ACCESS_KEY_ID and FLUENT_S3_SECRET_ACCESS_KEY
-        # are read from the environment automatically by the S3 plugin
 
   parsers.conf: |
     # No custom parsers needed — OTel Gateway sends structured Fluent Forward records

@@ -61,8 +61,10 @@ spec:
             value: homelab
             action: upsert
     exporters:
-      fluentforward:
-        endpoint: fluentbit-aggregator:24224
+      otlphttp:
+        endpoint: http://fluentbit-aggregator:4318
+        tls:
+          insecure: true
       prometheusremotewrite:
         endpoint: http://192.168.4.79:9090/api/v1/write
     service:
@@ -87,7 +89,7 @@ spec:
             - resource/cluster
             - batch
           exporters:
-            - fluentforward
+            - otlphttp
       telemetry:
         metrics:
           address: 0.0.0.0:8888
