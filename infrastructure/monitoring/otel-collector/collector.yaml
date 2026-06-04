@@ -34,10 +34,10 @@ spec:
       hostmetrics:
         collection_interval: 30s
         scrapers:
-          cpu: null
-          memory: null
-          disk: null
-          network: null
+          cpu: {}
+          memory: {}
+          disk: {}
+          network: {}
       kubeletstats:
         collection_interval: 30s
         auth_type: serviceAccount
