@@ -10,7 +10,7 @@ metadata:
   name: otel-collector-gateway
 rules:
   - apiGroups: [""]
-    resources: ["pods", "namespaces", "nodes", "endpoints", "services"]
+    resources: ["pods", "namespaces", "nodes", "endpoints", "services", "configmaps"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets"]
@@ -18,6 +18,14 @@ rules:
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors", "podmonitors"]
+    verbs: ["*"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -26,6 +34,20 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: otel-collector-gateway
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: otel-collector-gateway
+  apiGroup: rbac.authorization.k8s.io
+---
+# TargetAllocator-specific RBAC (operator creates separate SA for TA)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-gateway-targetallocator
+subjects:
+  - kind: ServiceAccount
+    name: otel-gateway-targetallocator
     namespace: monitoring
 roleRef:
   kind: ClusterRole
