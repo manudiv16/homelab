@@ -47,13 +47,28 @@ spec:
         include:
           - /var/log/pods/*/*/*.log
         operators:
-          - type: container
-            id: parser-containers
-            output: move_body
+          - type: regex_parser
+            id: cri-parser
+            regex: '^(?P<time>[^ ]+) (?P<stream>stdout|stderr) (?P<flags>[^ ?]) (?P<log>.*)$'
+            timestamp:
+              parse_from: attributes.time
+              layout: '%%Y-%%m-%%dT%%H:%%M:%%S.%%N%%z'
+            severity:
+              parse_from: attributes.stream
+              overwrite_text: true
           - type: move
-            id: move_body
+            id: set-body
             from: attributes.log
             to: body
+          - type: remove
+            id: remove-time
+            field: attributes.time
+          - type: remove
+            id: remove-stream
+            field: attributes.stream
+          - type: remove
+            id: remove-flags
+            field: attributes.flags
     processors:
       memory_limiter:
         check_interval: 5s

@@ -10,7 +10,8 @@ metadata:
   name: otel-collector-gateway
 rules:
   - apiGroups: [""]
-    resources: ["pods", "namespaces", "nodes", "endpoints", "services", "configmaps"]
+    resources:
+      ["pods", "namespaces", "nodes", "endpoints", "services", "configmaps"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets"]
