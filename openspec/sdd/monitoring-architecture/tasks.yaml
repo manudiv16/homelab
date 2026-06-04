@@ -1,0 +1,408 @@
+# SDD Tasks — monitoring-architecture
+# Change: monitoring-architecture
+# Phase: tasks
+# Stacks: infrastructure, apps
+# Status: draft
+
+review_workload_forecast:
+  estimated_changed_lines: "~350"
+  budget_400_risk: medium
+  chained_prs_recommended: false
+  suggested_split: "single PR"
+  delivery_strategy: single-pr
+  chain_strategy: pending
+  decision_needed_before_apply: false
+
+summary:
+  total_tasks: 24
+  manual_tasks: 14
+  repo_files_created: 14
+  review_lines:
+    phase_1: 0
+    phase_2: 30
+    phase_3: 155
+    phase_4: 217
+    phase_5: 0
+    phase_6: 0
+    phase_7: 0
+    total: "~402"
+
+tasks:
+  # =====================================================================
+  # Phase 1: Proxmox Infrastructure (Manual)
+  # =====================================================================
+
+  - id: T1.1
+    title: Provision Garage LXC on Proxmox
+    description: >
+      Run the community-scripts Garage installer on the Proxmox host.
+      Creates an Alpine Linux LXC (1 CPU, 512 MB RAM, 5 GB disk).
+      Garage listens on ports 3900 (S3), 3902 (Web UI), 3903 (Admin API).
+    files: []
+    phase: 1
+    type: provision
+    depends_on: []
+    review_estimate: 0
+    manual: true
+
+  - id: T1.2
+    title: Create logs bucket and S3 credentials
+    description: >
+      SSH into the Garage LXC. Create the `logs` bucket. Create an S3 API
+      key named `monitoring`. Grant read/write access. Record the access key
+      and secret key from `garage key info monitoring`.
+    files: []
+    phase: 1
+    type: configure
+    depends_on: [T1.1]
+    review_estimate: 0
+    manual: true
+
+  - id: T1.3
+    title: Record Garage LXC IP and credentials
+    description: >
+      Note the Garage LXC IP address, the S3 access key, and the secret key.
+      Store securely (not in the repo). Needed for Fluentbit GARAGE_S3_ENDPOINT
+      (T4.5) and Grafana DuckDB datasource (T6.4).
+    files: []
+    phase: 1
+    type: configure
+    depends_on: [T1.2]
+    review_estimate: 0
+    manual: true
+
+  # =====================================================================
+  # Phase 2: Monitoring Namespace + OTel Operator (Wave 1)
+  # =====================================================================
+
+  - id: T2.1
+    title: Create monitoring namespace
+    description: >
+      Create the `monitoring` namespace manifest. This namespace hosts the
+      OTel Collector DaemonSet, Gateway, and Fluentbit. The OTel Operator
+      deploys to its own `opentelemetry-operator-system` namespace.
+    files:
+      - infrastructure/monitoring/namespace.yaml
+    phase: 2
+    type: create
+    depends_on: []
+    review_estimate: 5
+    manual: false
+
+  - id: T2.2
+    title: Create OTel Operator ArgoCD Application
+    description: >
+      Create an ArgoCD Application manifest pointing to the upstream
+      OTel Operator repo (open-telemetry/opentelemetry-operator, tag v0.122.0,
+      path config/default). Uses ArgoCD native kustomize rendering. Sync wave 1.
+      Deploys to opentelemetry-operator-system namespace.
+    files:
+      - apps/otel-operator.yaml
+    phase: 2
+    type: create
+    depends_on: []
+    review_estimate: 25
+    manual: false
+
+  # =====================================================================
+  # Phase 3: OTel Collector DaemonSet (Wave 2)
+  # =====================================================================
+
+  - id: T3.1
+    title: Create DaemonSet ServiceAccount and RBAC
+    description: >
+      Create ServiceAccount, ClusterRole (get/list/watch on pods, namespaces,
+      nodes, deployments, replicasets, statefulsets, daemonsets, jobs, cronjobs),
+      and ClusterRoleBinding for the OTel Collector DaemonSet. Required for
+      k8sattributes, kubeletstats, and filelog receivers.
+    files:
+      - infrastructure/monitoring/otel-collector/rbac.yaml
+    phase: 3
+    type: create
+    depends_on: [T2.1]
+    review_estimate: 40
+    manual: false
+
+  - id: T3.2
+    title: Create OTel Collector DaemonSet CR
+    description: >
+      Create the OpenTelemetryCollector CR in daemonset mode. Image:
+      otel/opentelemetry-collector-contrib:0.123.0. Receivers: hostmetrics
+      (cpu, memory, disk, network; 30s), kubeletstats (30s, insecure_skip_verify),
+      filelog (/var/log/pods with container parser). Processors: memory_limiter
+      (400 MiB), batch, k8sattributes, resource/cluster. Exporter: otlp to
+      otel-gateway-collector:4317 (insecure). Two pipelines: metrics and logs.
+      HostPath volumes for /var/log/pods and /var/log.
+    files:
+      - infrastructure/monitoring/otel-collector/collector.yaml
+    phase: 3
+    type: create
+    depends_on: [T2.2, T3.1]
+    review_estimate: 90
+    manual: false
+
+  - id: T3.3
+    title: Create OTel Collector ArgoCD Application
+    description: >
+      Create an ArgoCD Application manifest pointing to
+      infrastructure/monitoring/otel-collector. Sync wave 2. Deploys to
+      monitoring namespace. Automated sync with prune and selfHeal.
+      CreateNamespace=true.
+    files:
+      - apps/otel-collector.yaml
+    phase: 3
+    type: create
+    depends_on: [T3.1, T3.2]
+    review_estimate: 25
+    manual: false
+
+  # =====================================================================
+  # Phase 4: OTel Gateway + Fluentbit (Wave 3)
+  # =====================================================================
+
+  - id: T4.1
+    title: Create Gateway ServiceAccount and RBAC
+    description: >
+      Create ServiceAccount, ClusterRole (extended: pods, namespaces, nodes,
+      endpoints, services, deployments, replicasets, statefulsets, endpointslices),
+      and ClusterRoleBinding for the OTel Collector Gateway. Extended permissions
+      needed for TargetAllocator pod discovery.
+    files:
+      - infrastructure/monitoring/otel-gateway/rbac.yaml
+    phase: 4
+    type: create
+    depends_on: [T2.1]
+    review_estimate: 40
+    manual: false
+
+  - id: T4.2
+    title: Create OTel Gateway StatefulSet CR
+    description: >
+      Create the OpenTelemetryCollector CR in statefulset mode, 1 replica.
+      Image: otel/opentelemetry-collector-contrib:0.123.0. Receivers: otlp
+      (gRPC 4317, HTTP 4318), prometheus (via TargetAllocator). Processors:
+      memory_limiter (800 MiB), batch, k8sattributes, resource/cluster.
+      Exporters: fluentforward to fluentbit-aggregator:24224,
+      prometheusremotewrite to http://PROMETHEUS_IP:9090/api/v1/write.
+      Two pipelines: metrics and logs. TargetAllocator enabled with
+      prometheusCR.enabled: true. Replace PROMETHEUS_IP placeholder after T5.1.
+    files:
+      - infrastructure/monitoring/otel-gateway/collector.yaml
+    phase: 4
+    type: create
+    depends_on: [T2.2, T4.1]
+    review_estimate: 100
+    manual: false
+
+  - id: T4.3
+    title: Create OTel Gateway ArgoCD Application
+    description: >
+      Create an ArgoCD Application manifest pointing to
+      infrastructure/monitoring/otel-gateway. Sync wave 3. Deploys to
+      monitoring namespace. Automated sync with prune and selfHeal.
+      CreateNamespace=true.
+    files:
+      - apps/otel-gateway.yaml
+    phase: 4
+    type: create
+    depends_on: [T4.1, T4.2]
+    review_estimate: 25
+    manual: false
+
+  - id: T4.4
+    title: Create Fluentbit configuration ConfigMap
+    description: >
+      Create a ConfigMap with fluent-bit.conf: SERVICE block (flush 5,
+      storage filesystem), INPUT forward on port 24224, OUTPUT S3 with
+      format parquet, Hive-style key format
+      /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet,
+      buffer total_file_size 5M / upload_timeout 5m. Uses GARAGE_S3_ENDPOINT
+      and GARAGE_BUCKET env vars.
+    files:
+      - infrastructure/monitoring/fluentbit/configmap.yaml
+    phase: 4
+    type: create
+    depends_on: [T2.1]
+    review_estimate: 55
+    manual: false
+
+  - id: T4.5
+    title: Create Fluentbit Deployment, Service, and Secret template
+    description: >
+      Create three files: (1) Deployment: 1 replica, image fluent/fluent-bit:4.1,
+      mounts ConfigMap at /fluent-bit/etc, emptyDir for buffers at
+      /var/fluent-bit/buffers, env vars GARAGE_S3_ENDPOINT and GARAGE_BUCKET,
+      envFrom garage-credentials Secret. (2) Service: ClusterIP, port 24224.
+      (3) Secret template (gitignored): garage-credentials with
+      AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY placeholders.
+    files:
+      - infrastructure/monitoring/fluentbit/deployment.yaml
+      - infrastructure/monitoring/fluentbit/service.yaml
+      - infrastructure/monitoring/fluentbit/secret.yaml
+    phase: 4
+    type: create
+    depends_on: [T4.4]
+    review_estimate: 70
+    manual: false
+
+  - id: T4.6
+    title: Add Fluentbit secret.yaml to .gitignore
+    description: >
+      Add infrastructure/monitoring/fluentbit/secret.yaml to .gitignore.
+      Note: existing .gitignore has *secret* pattern which already catches
+      this, but an explicit entry makes the intent clear.
+    files:
+      - .gitignore
+    phase: 4
+    type: configure
+    depends_on: []
+    review_estimate: 2
+    manual: false
+
+  - id: T4.7
+    title: Create Fluentbit ArgoCD Application
+    description: >
+      Create an ArgoCD Application manifest pointing to
+      infrastructure/monitoring/fluentbit. Sync wave 3. Deploys to
+      monitoring namespace. Automated sync with prune and selfHeal.
+      CreateNamespace=true.
+    files:
+      - apps/fluentbit.yaml
+    phase: 4
+    type: create
+    depends_on: [T4.4, T4.5, T4.6]
+    review_estimate: 25
+    manual: false
+
+  # =====================================================================
+  # Phase 5: Prometheus VM (Manual)
+  # =====================================================================
+
+  - id: T5.1
+    title: Provision Prometheus on Proxmox
+    description: >
+      Create a VM or LXC on Proxmox for Prometheus. Install Prometheus
+      (native or Docker). Enable --web.enable-remote-write-receiver flag.
+      Set retention: --storage.tsdb.retention.time=30d and
+      --storage.tsdb.retention.size=5GB.
+    files: []
+    phase: 5
+    type: provision
+    depends_on: []
+    review_estimate: 0
+    manual: true
+
+  - id: T5.2
+    title: Configure Prometheus for remote_write only
+    description: >
+      Create /etc/prometheus/prometheus.yml with global settings only
+      (scrape_interval, evaluation_interval). No scrape_configs section.
+      All metrics arrive via remote_write from OTel Gateway.
+    files: []
+    phase: 5
+    type: configure
+    depends_on: [T5.1]
+    review_estimate: 0
+    manual: true
+
+  # =====================================================================
+  # Phase 6: Grafana VM (Manual)
+  # =====================================================================
+
+  - id: T6.1
+    title: Provision Grafana on Proxmox
+    description: >
+      Create a VM or LXC on Proxmox for Grafana. Install Grafana (native
+      or Docker). Install the DuckDB plugin (grafana-duckdb-datasource).
+      Configure port 3000.
+    files: []
+    phase: 6
+    type: provision
+    depends_on: []
+    review_estimate: 0
+    manual: true
+
+  - id: T6.2
+    title: Add Prometheus datasource to Grafana
+    description: >
+      Provision a Prometheus datasource in Grafana pointing to
+      http://PROMETHEUS_IP:9090. Set as default datasource.
+    files: []
+    phase: 6
+    type: configure
+    depends_on: [T5.2, T6.1]
+    review_estimate: 0
+    manual: true
+
+  - id: T6.3
+    title: Add DuckDB datasource for Parquet logs
+    description: >
+      Provision a DuckDB datasource in Grafana with the S3 plugin. InitQuery
+      installs httpfs and configures S3 connection to Garage (s3_endpoint,
+      s3_region=garage, s3_use_ssl=false, s3_url_style=path). Provide S3
+      credentials from T1.2. Create the logs() macro for querying
+      Hive-partitioned Parquet files.
+    files: []
+    phase: 6
+    type: configure
+    depends_on: [T1.3, T6.1]
+    review_estimate: 0
+    manual: true
+
+  # =====================================================================
+  # Phase 7: End-to-End Verification
+  # =====================================================================
+
+  - id: T7.1
+    title: Verify ArgoCD sync status for all monitoring apps
+    description: >
+      Check ArgoCD for all 4 monitoring Applications: otel-operator (wave 1),
+      otel-collector (wave 2), otel-gateway (wave 3), fluentbit (wave 3).
+      All must be Synced and Healthy. Verify wave ordering was respected.
+    files: []
+    phase: 7
+    type: verify
+    depends_on: [T3.3, T4.3, T4.7]
+    review_estimate: 0
+    manual: true
+
+  - id: T7.2
+    title: Verify metrics reach Prometheus
+    description: >
+      Query Prometheus UI for recent host metrics (system_cpu_usage,
+      system_memory_usage). Verify time-series data points for all 3 nodes.
+      Confirm no scrape_configs in Prometheus config (push-only model).
+    files: []
+    phase: 7
+    type: verify
+    depends_on: [T5.2, T7.1]
+    review_estimate: 0
+    manual: true
+
+  - id: T7.3
+    title: Verify Parquet log files in Garage S3
+    description: >
+      List objects in the logs bucket via Garage Admin API or S3 CLI.
+      Verify Parquet files exist under raw/containers/ with correct
+      Hive-style partitions. Download one file and verify it is valid
+      Parquet. Check records contain k8s metadata fields
+      (k8s_namespace_name, k8s_pod_name, k8s_container_name).
+    files: []
+    phase: 7
+    type: verify
+    depends_on: [T7.1]
+    review_estimate: 0
+    manual: true
+
+  - id: T7.4
+    title: Verify Grafana queries metrics and logs
+    description: >
+      In Grafana: (1) Create a panel with PromQL (system_cpu_usage) — data
+      renders. (2) Create a SQL panel with DuckDB using the logs() macro —
+      log records are returned. Verify both datasources work end-to-end.
+    files: []
+    phase: 7
+    type: verify
+    depends_on: [T6.2, T6.3, T7.2, T7.3]
+    review_estimate: 0
+    manual: true

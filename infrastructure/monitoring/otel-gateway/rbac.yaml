@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector-gateway
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector-gateway
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes", "endpoints", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector-gateway
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector-gateway
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: otel-collector-gateway
+  apiGroup: rbac.authorization.k8s.io

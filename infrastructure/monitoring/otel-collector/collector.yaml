@@ -1,0 +1,101 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: collector-daemonset
+  namespace: monitoring
+spec:
+  mode: daemonset
+  serviceAccount: otel-collector-daemonset
+  image: otel/opentelemetry-collector-contrib:0.123.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  # Host network not required; filelog reads hostPath volume
+  volumes:
+    - name: varlogpods
+      hostPath:
+        path: /var/log/pods
+        type: Directory
+    - name: varlog
+      hostPath:
+        path: /var/log
+        type: Directory
+  volumeMounts:
+    - name: varlogpods
+      mountPath: /var/log/pods
+      readOnly: true
+    - name: varlog
+      mountPath: /var/log
+      readOnly: true
+  config: |
+    receivers:
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu:
+          memory:
+          disk:
+          network:
+      kubeletstats:
+        collection_interval: 30s
+        auth_type: serviceAccount
+        endpoint: "${env:K8S_NODE_NAME}:10250"
+        # Insecure for homelab — kubelet on LXC does not have valid cert
+        # for the node IP. serviceAccount auth still validates the token.
+        insecure_skip_verify: true
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        operators:
+          - type: container
+            id: parser-containers
+            output: move_body
+          - type: move
+            id: move_body
+            from: attributes.log
+            to: body
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 400
+        spike_limit_mib: 100
+      batch:
+        timeout: 10s
+      k8sattributes:
+        auth_type: serviceAccount
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.container.name
+            - k8s.node.name
+            - k8s.deployment.name
+      resource/cluster:
+        attributes:
+          - key: cluster.name
+            value: homelab
+            action: upsert
+
+    exporters:
+      otlp:
+        endpoint: "otel-gateway-collector:4317"
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [hostmetrics, kubeletstats]
+          processors: [memory_limiter, k8sattributes, resource/cluster, batch]
+          exporters: [otlp]
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, k8sattributes, resource/cluster, batch]
+          exporters: [otlp]
+      telemetry:
+        metrics:
+          address: "0.0.0.0:8888"

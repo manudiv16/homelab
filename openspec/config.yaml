@@ -1,0 +1,166 @@
+# ============================================================================
+# OpenSpec SDD Configuration — homelab
+# Kubernetes homelab: k3s on Proxmox LXC, ArgoCD (App of Apps), Ansible
+# ============================================================================
+project:
+  name: homelab
+  description: >
+    Kubernetes homelab managed with ArgoCD (App of Apps pattern) on k3s 
+    running in Proxmox LXC containers. Cluster provisioning via Ansible,
+    GitOps-based application management via ArgoCD.
+  owner: manudiv16
+  repo: https://github.com/manudiv16/homelab.git
+  target_revision: main
+
+# ---------------------------------------------------------------------------
+# Strict TDD — every change must trace to an SDD artifact
+# ---------------------------------------------------------------------------
+strict_tdd: true
+
+# ---------------------------------------------------------------------------
+# Phase rules
+# ---------------------------------------------------------------------------
+phase_rules:
+  init:
+    required_artifacts:
+      - openspec/config.yaml
+    description: Project initialization and SDD context setup
+  proposal:
+    required_artifacts:
+      - openspec/sdd/<change>/proposal.md
+    description: >
+      Proposal phase — define the change, motivation, and high-level approach.
+      Must reference at least one of the project stacks (ansible, apps, bootstrap,
+      infrastructure).
+  spec:
+    required_artifacts:
+      - openspec/sdd/<change>/spec.md
+    description: >
+      Specification phase — detailed requirements, acceptance criteria,
+      and resource estimates for the change.
+  design:
+    required_artifacts:
+      - openspec/sdd/<change>/design.md
+    description: >
+      Design phase — architecture decisions, component breakdown, and
+      implementation plan for Kubernetes manifests, ArgoCD Application
+      definitions, and/or Ansible playbooks.
+  tasks:
+    required_artifacts:
+      - openspec/sdd/<change>/tasks.yaml
+    description: >
+      Task breakdown — concrete, ordered work items with file paths,
+      ArgoCD Application references, and testing/infrastructure notes.
+  apply:
+    required_artifacts:
+      - openspec/sdd/<change>/apply-progress.md
+    description: >
+      Apply phase — implements the tasks defined in the tasks phase.
+      Tracks progress against the task list.
+  verify:
+    required_artifacts:
+      - openspec/sdd/<change>/verify-report.md
+    description: >
+      Verification phase — validate changes align with spec, run
+      kubectl diff/apply --dry-run, check ArgoCD sync status,
+      verify cluster state.
+
+# ---------------------------------------------------------------------------
+# Project infrastructure stacks
+# ---------------------------------------------------------------------------
+stacks:
+  ansible:
+    path: ansible/
+    description: >
+      Ansible inventory, playbooks, and k3s-ansible submodule for
+      cluster provisioning. Contains group_vars, hosts.ini, and ansible.cfg.
+    tools:
+      - ansible-playbook
+      - ansible-vault
+    testing: molecule (upstream, in k3s-ansible submodule)
+    conventions:
+      - YAML files with .yaml extension
+      - group_vars structured by node role (all.yml, proxmox.yml)
+      - Secrets managed via ansible-vault or environment variables
+      - Single master, no VIP, direct apiserver endpoint
+
+  argocd:
+    path: bootstrap/argocd/
+    description: >
+      ArgoCD bootstrap manifests and app-of-apps configuration.
+      The root Application watches apps/ with recurse: true.
+    tools:
+      - kubectl
+      - argocd CLI
+    conventions:
+      - repoURL: https://github.com/manudiv16/homelab.git
+      - targetRevision: main
+      - Automated sync with prune and selfHeal
+      - Namespace-scoped deployments under argocd namespace
+
+  apps:
+    path: apps/
+    description: >
+      ArgoCD Application definitions in App of Apps pattern.
+      Each YAML defines an ArgoCD Application resource pointing to a
+      subdirectory of the repo.
+    conventions:
+      - One YAML file per Application
+      - Application definitions in apps/ directory
+      - Automated sync with CreateNamespace=true for infrastructure apps
+
+  infrastructure:
+    path: infrastructure/base/
+    description: >
+      Core infrastructure Kubernetes manifests including namespaces,
+      CRDs, and shared cluster resources.
+    conventions:
+      - Plain Kubernetes YAML manifests (no Helm, no Kustomize currently)
+      - infrastructure namespace for shared infra components
+
+# ---------------------------------------------------------------------------
+# Testing runner configuration
+# ---------------------------------------------------------------------------
+testing:
+  runner: none
+  description: >
+    No project-level test runner detected. The k3s-ansible submodule has
+    Molecule tests for Ansible roles (upstream), but the homelab project
+    itself does not define tests. Verification is done via:
+    - kubectl apply --dry-run=client/server
+    - kubectl diff
+    - ArgoCD sync status checks
+    - Ansible --syntax-check
+    - Manual cluster observation
+  conventions:
+    - Prefer kubectl diff or --dry-run before applying changes
+    - Ansible syntax check via ansible-playbook --syntax-check
+    - ArgoCD sync policy automated (prune + selfHeal)
+
+# ---------------------------------------------------------------------------
+# Conventions
+# ---------------------------------------------------------------------------
+conventions:
+  git_submodules:
+    - path: ansible/k3s-ansible
+      url: https://github.com/timothystewart6/k3s-ansible.git
+      description: Upstream k3s Ansible playbooks for cluster provisioning
+  secrets:
+    - .gitignore blocks *.key, *.pem, *.env, kubeconfig*, *credentials*
+    - Ansible vault recommended for sensitive vars in group_vars
+    - k3s token not committed; set via ansible-vault or environment
+  cluster:
+    - CNI: Flannel (eth0)
+    - LoadBalancer: MetalLB v0.15.3 (Layer2, range 192.168.4.210-220)
+    - Ingress: Traefik disabled (deploy separately via ArgoCD)
+    - Storage: local-path-provisioner (default)
+    - k3s version: v1.35.5+k3s1
+    - Proxmox LXC: privileged containers, apparmor unconfined
+  kubeconfig: ~/.kube/config.k3s-homelab
+
+# ---------------------------------------------------------------------------
+# Skill registry reference
+# ---------------------------------------------------------------------------
+skill_registry:
+  path: .atl/skill-registry.md
+  status: present

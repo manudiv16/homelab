@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluentbit-aggregator
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: fluentbit-aggregator
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: fluentbit-aggregator
+  ports:
+    - port: 24224
+      targetPort: 24224
+      protocol: TCP
+      name: fluent-forward

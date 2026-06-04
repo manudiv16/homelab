@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluentbit-aggregator
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: fluentbit-aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluentbit-aggregator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fluentbit-aggregator
+    spec:
+      containers:
+        - name: fluentbit
+          image: fluent/fluent-bit:4.1 # v4.1+ required for Parquet S3 output
+          ports:
+            - containerPort: 24224
+              name: fluent-forward
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc
+            - name: buffers
+              mountPath: /var/fluent-bit/buffers
+          env:
+            - name: GARAGE_S3_ENDPOINT
+              value: "http://__GARAGE_IP__:3900"
+            - name: GARAGE_BUCKET
+              value: "logs"
+          envFrom:
+            - secretRef:
+                name: garage-credentials
+      volumes:
+        - name: config
+          configMap:
+            name: fluentbit-aggregator-config
+        - name: buffers
+          emptyDir: {}

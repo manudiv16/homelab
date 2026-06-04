@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    # Upstream operator manifest from the official OTel Operator releases
+    # This URL points to the latest stable release manifest bundle
+    # (CRDs + Deployment + RBAC + Webhook)
+    repoURL: https://github.com/open-telemetry/opentelemetry-operator.git
+    targetRevision: v0.122.0
+    path: config/default
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: opentelemetry-operator-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
