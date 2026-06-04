@@ -70,7 +70,7 @@ spec:
       fluentforward:
         endpoint: "fluentbit-aggregator:24224"
       prometheusremotewrite:
-        endpoint: "http://__PROMETHEUS_IP__:9090/api/v1/write"
+        endpoint: "http://192.168.4.79:9090/api/v1/write"
         # No auth for homelab simplicity. Prometheus is on a trusted LAN.
         # If basic auth is enabled on Prometheus, add:
         #   auth:

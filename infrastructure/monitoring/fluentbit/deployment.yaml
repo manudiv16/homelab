@@ -35,7 +35,7 @@ spec:
               mountPath: /var/fluent-bit/buffers
           env:
             - name: GARAGE_S3_ENDPOINT
-              value: "http://__GARAGE_IP__:3900"
+              value: "http://192.168.4.76:3900"
             - name: GARAGE_BUCKET
               value: "logs"
           envFrom:
