@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: fluentbit
-          image: fluent/fluent-bit:4.1 # v4.1+ required for Parquet S3 output
+          image: public.ecr.aws/aws-observability/aws-for-fluent-bit:3.0.0 # AWS distribution with Apache Arrow for Parquet S3 output
           ports:
             - containerPort: 24224
               name: fluent-forward

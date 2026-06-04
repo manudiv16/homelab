@@ -45,7 +45,7 @@ data:
         tls                   off
         tls.verify            off
         use_put_object        On
-        # Parquet compression — requires Fluentbit v4.1+ with Apache Arrow
+        # Parquet compression via Apache Arrow (AWS image bundles Arrow)
         compression           parquet
         # Hive-style partitioning
         s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
