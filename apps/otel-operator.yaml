@@ -8,12 +8,13 @@ metadata:
 spec:
   project: default
   source:
-    # Upstream operator manifest from the official OTel Operator releases
-    # This URL points to the latest stable release manifest bundle
-    # (CRDs + Deployment + RBAC + Webhook)
-    repoURL: https://github.com/open-telemetry/opentelemetry-operator.git
-    targetRevision: v0.122.0
-    path: config/default
+    # Local vendored manifest from upstream release v0.122.0
+    # The upstream kustomize (config/default) uses a placeholder image reference
+    # ("controller") that doesn't resolve via ArgoCD's kustomize support.
+    # Using the pre-built release manifest avoids this issue entirely.
+    repoURL: https://github.com/manudiv16/homelab.git
+    targetRevision: main
+    path: apps/otel-operator
     kustomize: {}
   destination:
     server: https://kubernetes.default.svc
