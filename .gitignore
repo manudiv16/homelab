@@ -1,0 +1,37 @@
+# Secrets and credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.env
+.env*
+kubeconfig*
+config.k3s*
+*credentials*
+*secret*
+*.htpasswd
+
+# Kubeconfigs (never commit)
+.kube/
+kubeconfig
+
+# Local tool state
+.atl/
+.pi/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# IDE
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
