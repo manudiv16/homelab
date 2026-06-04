@@ -45,9 +45,8 @@ data:
         tls                   off
         tls.verify            off
         use_put_object        On
-        compression           none
-        # Parquet format — requires Fluentbit v4.1+
-        Format                parquet
+        # Parquet compression — requires Fluentbit v4.1+ with Apache Arrow
+        compression           parquet
         # Hive-style partitioning
         s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
         # Buffering: flush every 5MB or every 5 minutes
