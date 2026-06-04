@@ -5,6 +5,7 @@ Kubernetes homelab managed with ArgoCD (App of Apps pattern) on k3s.
 ## Structure
 
 ```
+├── ansible/              # Ansible inventory + config (cluster provisioning)
 ├── bootstrap/
 │   └── argocd/          # ArgoCD installation + app-of-apps bootstrap
 ├── apps/                # ArgoCD Application definitions (app-of-apps)
@@ -13,7 +14,16 @@ Kubernetes homelab managed with ArgoCD (App of Apps pattern) on k3s.
     └── base/            # Infrastructure-level manifests (namespaces, CRDs, etc.)
 ```
 
-## Bootstrap
+## Quick Start
+
+### 1. Cluster provisioning (Ansible)
+
+```bash
+cd ansible
+ansible-playbook k3s-ansible/site.yml
+```
+
+### 2. Bootstrap ArgoCD
 
 ```bash
 # Set kubeconfig
@@ -26,6 +36,8 @@ kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manif
 # Then bootstrap the app-of-apps
 kubectl apply -f bootstrap/argocd/app-of-apps.yaml
 ```
+
+See `ansible/README.md` for full cluster provisioning details.
 
 ## Adding a new app
 

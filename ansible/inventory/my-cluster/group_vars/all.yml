@@ -1,0 +1,70 @@
+---
+k3s_version: v1.35.5+k3s1
+
+# SSH user for k3s nodes (created during LXC provisioning)
+ansible_user: ansibleuser
+systemd_dir: /etc/systemd/system
+
+# Timezone
+system_timezone: Europe/Madrid
+
+# Network interface for flannel
+flannel_iface: eth0
+
+# Single master — no VIP, use master node IP directly
+apiserver_endpoint: 192.168.4.201
+
+# k3s token — CHANGE THIS for production clusters
+# k3s_token — set via ansible-vault or environment variable
+# For first-time deploy, uncomment and set your token:
+# k3s_token: "your-secure-token-here"
+
+# Node IP discovery
+k3s_node_ip: "{{ ansible_facts[flannel_iface]['ipv4']['address'] }}"
+
+# Master group name for kube-vip logic
+group_name_master: master
+
+# Allow workloads on master (single-node cluster)
+k3s_master_taint: false
+
+# No kube-vip (single master)
+kube_vip_arp: false
+
+# No BGP for Cilium
+cilium_bgp: false
+
+# Extra k3s args
+extra_args: >-
+  --flannel-iface={{ flannel_iface }}
+  --node-ip={{ k3s_node_ip }}
+
+extra_server_args: >-
+  {{ extra_args }}
+  --tls-san {{ apiserver_endpoint }}
+  --disable servicelb
+  --disable traefik
+
+extra_agent_args: >-
+  {{ extra_args }}
+
+# kube-vip tag (not used, kept for compatibility)
+kube_vip_tag_version: v0.8.2
+
+# MetalLB config
+metal_lb_type: native
+metal_lb_mode: layer2
+metal_lb_speaker_tag_version: v0.15.3
+metal_lb_controller_tag_version: v0.15.3
+metal_lb_ip_range: 192.168.4.210-192.168.4.220
+
+# Custom registries — disabled
+custom_registries: false
+
+# Proxmox LXC configuration
+proxmox_lxc_configure: true
+proxmox_lxc_ssh_user: root
+proxmox_lxc_ct_ids:
+  - 200
+  - 201
+  - 202
