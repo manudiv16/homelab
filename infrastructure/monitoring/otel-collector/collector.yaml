@@ -52,7 +52,7 @@ spec:
             regex: '^(?P<time>[^ ]+) (?P<stream>stdout|stderr) (?P<flags>[^ ?]) (?P<log>.*)$'
             timestamp:
               parse_from: attributes.time
-              layout: '%%Y-%%m-%%dT%%H:%%M:%%S.%%N%%z'
+              layout: '%Y-%m-%dT%H:%M:%S.%N%z'
             severity:
               parse_from: attributes.stream
               overwrite_text: true
