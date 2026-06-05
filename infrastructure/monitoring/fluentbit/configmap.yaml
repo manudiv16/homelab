@@ -38,7 +38,7 @@ data:
     # ---- Output: S3 (Garage) with Parquet format ----
     [OUTPUT]
         Name                  s3
-        Match                 opentelemetry.*
+        Match                 *
         bucket                ${GARAGE_BUCKET}
         region                garage
         endpoint              ${GARAGE_S3_ENDPOINT}
@@ -51,6 +51,12 @@ data:
         total_file_size       1M
         upload_timeout        3m
         # S3 credentials from environment (injected via Secret)
+
+    # ---- Debug: stdout for testing ----
+    [OUTPUT]
+        Name                  stdout
+        Match                 *
+        format                json_lines
 
   parsers.conf: |
     # No custom parsers needed — OTel Gateway sends structured Fluent Forward records
