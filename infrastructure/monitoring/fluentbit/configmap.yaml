@@ -40,10 +40,7 @@ data:
         Name    lua
         Match   *
         call    cb_strip_internal
-        code    function cb_strip_internal(tag, timestamp, record)
-                   record["__internal__"] = nil
-                   return 0, timestamp, record
-                end
+        code    function cb_strip_internal(tag, timestamp, record) record["__internal__"] = nil return 0, timestamp, record end
 
     # ---- Output: S3 (Garage) with Parquet format ----
     [OUTPUT]
