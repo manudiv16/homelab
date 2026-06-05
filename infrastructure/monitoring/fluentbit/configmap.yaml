@@ -29,7 +29,6 @@ data:
     # ---- Input: OpenTelemetry from OTel Gateway ----
     [INPUT]
         Name              opentelemetry
-        Tag               logs.containers
         Listen            0.0.0.0
         Port              4318
         # Buffer settings for OTLP HTTP
@@ -39,7 +38,7 @@ data:
     # ---- Output: S3 (Garage) with Parquet format ----
     [OUTPUT]
         Name                  s3
-        Match                 logs.*
+        Match                 opentelemetry.*
         bucket                ${GARAGE_BUCKET}
         region                garage
         endpoint              ${GARAGE_S3_ENDPOINT}
