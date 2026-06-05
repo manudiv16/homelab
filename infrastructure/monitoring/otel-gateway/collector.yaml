@@ -34,11 +34,6 @@ spec:
             endpoint: 0.0.0.0:4317
           http:
             endpoint: 0.0.0.0:4318
-      prometheus:
-        config:
-          scrape_configs:
-            - job_name: otel-gateway
-              scrape_interval: 30s
     processors:
       memory_limiter:
         check_interval: 5s
@@ -72,7 +67,6 @@ spec:
         metrics:
           receivers:
             - otlp
-            - prometheus
           processors:
             - memory_limiter
             - k8sattributes
