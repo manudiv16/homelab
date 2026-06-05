@@ -35,11 +35,15 @@ data:
         Buffer_Chunk_Size 1M
         Buffer_Max_Size   5M
 
-    # ---- Filter: flatten OTel nested structure for S3 compatibility ----
+    # ---- Filter: remove __internal__ field for S3 compatibility ----
     [FILTER]
-        Name    modify
+        Name    lua
         Match   *
-        Remove  __internal__
+        call    cb_strip_internal
+        code    function cb_strip_internal(tag, timestamp, record)
+                   record["__internal__"] = nil
+                   return 0, timestamp, record
+                end
 
     # ---- Output: S3 (Garage) with Parquet format ----
     [OUTPUT]
