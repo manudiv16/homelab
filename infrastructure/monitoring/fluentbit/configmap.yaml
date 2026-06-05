@@ -69,8 +69,6 @@ data:
 
   filter.lua: |
     function cb_strip_internal(tag, timestamp, record)
-        if record["__internal__"] then
-            record["__internal__"] = nil
-        end
+        record["__internal__"] = nil
         return 0, timestamp, record
     end
