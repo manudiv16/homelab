@@ -29,6 +29,7 @@ data:
     # ---- Input: OpenTelemetry from OTel Gateway ----
     [INPUT]
         Name              opentelemetry
+        Tag               logs.containers
         Listen            0.0.0.0
         Port              4318
         # Buffer settings for OTLP HTTP
@@ -47,8 +48,8 @@ data:
         use_put_object        On
         # Parquet compression via Apache Arrow (AWS image bundles Arrow)
         compression           parquet
-        # Hive-style partitioning
-        s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
+        # Hive-style key format: tag/uuid
+        s3_key_format         /containers/$TAG/$UUID.parquet
         # Buffering: flush every 5MB or every 5 minutes
         total_file_size       5M
         upload_timeout        5m
