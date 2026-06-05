@@ -35,6 +35,12 @@ data:
         Buffer_Chunk_Size 1M
         Buffer_Max_Size   5M
 
+    # ---- Filter: flatten OTel nested structure for S3 compatibility ----
+    [FILTER]
+        Name    modify
+        Match   *
+        Remove  __internal__
+
     # ---- Output: S3 (Garage) with Parquet format ----
     [OUTPUT]
         Name                  s3
