@@ -69,6 +69,9 @@ data:
 
   filter.lua: |
     function cb_strip_internal(tag, timestamp, record)
+        for k,_ in pairs(record) do
+            io.stderr:write("DEBUG Lua key: " .. k .. "\n")
+        end
         record.__internal__ = nil
         return 0, timestamp, record
     end
