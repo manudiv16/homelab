@@ -46,14 +46,6 @@ spec:
       filelog:
         include:
           - /var/log/pods/*/*/*.log
-        operators:
-          - type: cri
-            id: cri-parser
-            output: set-body
-          - type: move
-            id: set-body
-            from: attributes.log
-            to: body
     processors:
       memory_limiter:
         check_interval: 5s
