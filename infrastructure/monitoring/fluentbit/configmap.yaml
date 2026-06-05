@@ -49,8 +49,8 @@ data:
         # Key format: tag/uuid
         s3_key_format         /containers/$TAG/$UUID.parquet
         # Buffering: flush every 5MB or every 5 minutes
-        total_file_size       1M
-        upload_timeout        1m
+        total_file_size       50K
+        upload_timeout        30s
         # S3 credentials from environment (injected via Secret)
 
   parsers.conf: |
