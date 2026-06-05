@@ -39,7 +39,7 @@ data:
     # ---- Output: S3 (Garage) with Parquet format ----
     [OUTPUT]
         Name                  s3
-        Match                 *
+        Match                 logs.*
         bucket                ${GARAGE_BUCKET}
         region                garage
         endpoint              ${GARAGE_S3_ENDPOINT}
