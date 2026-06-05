@@ -15,17 +15,7 @@ spec:
     limits:
       memory: 1Gi
   targetAllocator:
-    enabled: true
-    image: ghcr.io/open-telemetry/opentelemetry-operator/target-allocator:0.122.0
-    replicas: 1
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        memory: 128Mi
-    prometheusCR:
-      enabled: false
+    enabled: false
   config:
     receivers:
       otlp:
