@@ -14,7 +14,7 @@ data:
     [SERVICE]
         flush           5
         daemon          off
-        log_level       info
+        log_level       debug
         parsers_file    parsers.conf
         plugins_file    plugins.conf
         http_server     on
