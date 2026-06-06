@@ -10,10 +10,6 @@ spec:
   selector:
     app.kubernetes.io/name: fluentbit-aggregator
   ports:
-    - port: 4318
-      targetPort: 4318
-      protocol: TCP
-      name: otlp-http
     - port: 24224
       targetPort: 24224
       protocol: TCP

@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: fluentbit
-          image: fluent/fluent-bit:4.1.1
+          image: public.ecr.aws/aws-observability/aws-for-fluent-bit:3.0.0
           ports:
             - containerPort: 24224
               name: fluent-forward
@@ -31,8 +31,6 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /fluent-bit/etc
-            - name: scripts
-              mountPath: /fluent-bit/scripts
             - name: buffers
               mountPath: /var/fluent-bit/buffers
           env:
@@ -47,11 +45,5 @@ spec:
         - name: config
           configMap:
             name: fluentbit-aggregator-config
-        - name: scripts
-          configMap:
-            name: fluentbit-aggregator-config
-            items:
-              - key: filter.lua
-                path: filter.lua
         - name: buffers
           emptyDir: {}

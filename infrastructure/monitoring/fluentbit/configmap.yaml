@@ -7,7 +7,7 @@ data:
   fluent-bit.conf: |
     # ==============================================================
     # Fluentbit Aggregator Configuration
-    # Receives logs from OTel Gateway via OpenTelemetry protocol
+    # Receives logs from Fluentbit DaemonSet via Forward protocol
     # Writes Parquet files to Garage (S3) with Hive partitioning
     # ==============================================================
 
@@ -26,24 +26,15 @@ data:
         storage.checksum          off
         storage.backlog.mem_limit 50M
 
-    # ---- Input: OpenTelemetry from OTel Gateway ----
+    # ---- Input: Forward from Fluentbit DaemonSet ----
     [INPUT]
-        Name              opentelemetry
+        Name              forward
         Listen            0.0.0.0
-        Port              4318
-        # Buffer settings for OTLP HTTP
+        Port              24224
         Buffer_Chunk_Size 1M
         Buffer_Max_Size   5M
 
-    # ---- Filter: Transform OTel records for S3/Parquet compatibility ----
-    # Uses extended callback (5 params) for OTel group/metadata access
-    [FILTER]
-        Name    lua
-        Match   *
-        call    cb_transform_otel
-        script  /fluent-bit/scripts/filter.lua
-
-    # ---- Output: S3 (Garage) with Parquet format ----
+    # ---- Output: S3 (Garage) with Parquet compression ----
     [OUTPUT]
         Name                  s3
         Match                 *
@@ -53,64 +44,17 @@ data:
         tls                   off
         tls.verify            off
         use_put_object        On
-        # Key format: tag/uuid
-        s3_key_format         /containers/$TAG/$UUID.parquet
-        # Buffering: flush every 5MB or every 5 minutes
+        # Hive partitioning: /raw/containers/year=YYYY/month=MM/day=DD/hour=HH/uuid.parquet
+        s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
+        # Buffering: flush every 1MB or every 5 minutes (whichever first)
         total_file_size       1M
-        upload_timeout        3m
+        upload_timeout        5m
+        # Arrow/Parquet compression
+        compression           arrow
         # S3 credentials from environment (injected via Secret)
 
   parsers.conf: |
-    # No custom parsers needed — OTel Gateway sends structured Fluent Forward records
+    # No custom parsers needed — Aggregator receives structured records from DaemonSet
 
   plugins.conf: |
     # No additional plugin loading needed
-
-  filter.lua: |
-    -- Transform OTel logs for S3/Parquet output
-    -- Uses extended callback (5 params) required for OTel group/metadata
-    -- IMPORTANT: return 1 = record modified, return 0 = no modification
-
-    function table_size(t)
-        local c = 0
-        for _ in pairs(t) do
-            c = c + 1
-        end
-        return c
-    end
-
-    function cb_transform_otel(tag, timestamp, group, metadata, record)
-        -- Extract OTel metadata to flat record fields
-        if metadata["otlp"] then
-            local otlp = metadata["otlp"]
-            if otlp["severity_text"] then
-                record["_severity"] = otlp["severity_text"]
-            end
-            if otlp["severity_number"] then
-                record["_severity_num"] = tostring(otlp["severity_number"])
-            end
-            if otlp["trace_id"] then
-                record["_trace_id"] = otlp["trace_id"]
-            end
-            if otlp["span_id"] then
-                record["_span_id"] = otlp["span_id"]
-            end
-            if otlp["attributes"] then
-                for k, v in pairs(otlp["attributes"]) do
-                    record["_attr_" .. k] = tostring(v)
-                end
-            end
-            -- Clear OTel metadata to prevent S3 serialization issues
-            metadata["otlp"] = nil
-        end
-
-        -- Extract resource attributes to flat record fields
-        if group["resource"] and group["resource"]["attributes"] then
-            for k, v in pairs(group["resource"]["attributes"]) do
-                record["_res_" .. k] = tostring(v)
-            end
-        end
-
-        -- IMPORTANT: return 1 = record was modified, use the returned record
-        return 1, timestamp, metadata, record
-    end
