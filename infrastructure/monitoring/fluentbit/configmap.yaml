@@ -57,6 +57,18 @@ data:
         s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
         # S3 credentials from environment (injected via Secret)
 
+    # ---- Debug: stdout for kube records ----
+    [OUTPUT]
+        Name                  stdout
+        Match                 kube.*
+        format                json_lines
+
+    # ---- Debug: stdout for containers records ----
+    [OUTPUT]
+        Name                  stdout
+        Match                 containers
+        format                json_lines
+
   parsers.conf: |
     # No custom parsers needed — Aggregator receives structured records from DaemonSet
 
