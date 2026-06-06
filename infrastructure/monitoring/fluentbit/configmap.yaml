@@ -50,7 +50,7 @@ data:
         total_file_size       1M
         upload_timeout        5m
         # Arrow/Parquet compression
-        compression           arrow
+        compression           parquet
         # S3 credentials from environment (injected via Secret)
 
   parsers.conf: |
