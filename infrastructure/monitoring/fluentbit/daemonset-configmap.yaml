@@ -47,6 +47,6 @@ data:
     [OUTPUT]
         Name              forward
         Match             kube.*
-        Host              fluentbit-aggregator.monitoring.svc.cluster.local
+        Host              fluentbit-aggregator
         Port              24224
         Retry_Limit       10
