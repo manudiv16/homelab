@@ -60,12 +60,6 @@ data:
         upload_timeout        3m
         # S3 credentials from environment (injected via Secret)
 
-    # ---- Debug: stdout to verify record structure ----
-    [OUTPUT]
-        Name                  stdout
-        Match                 *
-        format                json_lines
-
   parsers.conf: |
     # No custom parsers needed — OTel Gateway sends structured Fluent Forward records
 
