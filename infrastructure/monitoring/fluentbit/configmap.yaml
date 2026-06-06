@@ -49,11 +49,10 @@ data:
         endpoint              ${GARAGE_S3_ENDPOINT}
         tls                   off
         tls.verify            off
-        use_put_object        On
         Total_File_Size       5M
         Upload_Timeout        5m
         store_dir             /tmp/fluent-bit/s3
-        Use_Put_Object        On
+        use_put_object        On
         compression           parquet
         s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
         # S3 credentials from environment (injected via Secret)
