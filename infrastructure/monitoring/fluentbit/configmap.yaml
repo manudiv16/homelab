@@ -38,7 +38,7 @@ data:
     [FILTER]
         Name          rewrite_tag
         Match         kube.*
-        Rule          \$pod ^.*$ containers false
+        Rule          $pod ^.*$ containers false
 
     # ---- Output: S3 (Garage) with Parquet compression ----
     [OUTPUT]
