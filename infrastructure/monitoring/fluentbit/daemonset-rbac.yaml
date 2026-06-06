@@ -5,7 +5,6 @@ metadata:
   namespace: monitoring
 
 ---
-
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -22,7 +21,6 @@ rules:
       - watch
 
 ---
-
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

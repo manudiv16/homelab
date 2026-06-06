@@ -10,6 +10,7 @@ data:
     # Reads container logs via tail input
     # Enriches with Kubernetes metadata
     # Forwards to Aggregator via Forward protocol
+    # Uses Allowlist_key to ensure fixed Parquet schema
     # ==============================================================
 
     [SERVICE]
@@ -38,10 +39,51 @@ data:
         Kube_URL            https://kubernetes.default.svc:443
         Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
-        Merge_Log           On
+        Merge_Log           Off
+        Keep_Log            Off
+        Labels              On
         Annotations         Off
-        Labels              Off
         Buffer_Size         0
+
+    # ---- Filter: Lift kubernetes fields to root level ----
+    [FILTER]
+        Name                nest
+        Match               kube.*
+        Operation           lift
+        Nested_under        kubernetes
+        Add_prefix          k8s_
+
+    # ---- Filter: Rename to short field names ----
+    [FILTER]
+        Name                modify
+        Match               kube.*
+        Rename              k8s_namespace_name  namespace
+        Rename              k8s_pod_name        pod
+        Rename              k8s_container_name  container
+        Rename              k8s_host            node
+
+    # ---- Filter: Add default values for missing fields ----
+    [FILTER]
+        Name                modify
+        Match               kube.*
+        Add                 namespace  unknown
+        Add                 pod        unknown
+        Add                 container  unknown
+        Add                 node       unknown
+        Add                 log        ""
+
+    # ---- Filter: Ensure fixed schema with allowlist ----
+    [FILTER]
+        Name                record_modifier
+        Match               kube.*
+        UUID_Key            id
+        Allowlist_key       time
+        Allowlist_key       id
+        Allowlist_key       namespace
+        Allowlist_key       pod
+        Allowlist_key       container
+        Allowlist_key       node
+        Allowlist_key       log
 
     # ---- Output: Forward to Aggregator ----
     [OUTPUT]
@@ -50,3 +92,4 @@ data:
         Host              fluentbit-aggregator
         Port              24224
         Retry_Limit       10
+        Require_ack_response True

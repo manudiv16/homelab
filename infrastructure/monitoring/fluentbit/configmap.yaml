@@ -34,23 +34,28 @@ data:
         Buffer_Chunk_Size 1M
         Buffer_Max_Size   5M
 
-    # ---- Output: S3 (Garage) with GZip JSON compression ----
+    # ---- Filter: Rewrite tag to separate log categories ----
+    [FILTER]
+        Name          rewrite_tag
+        Match         kube.*
+        Rule          \$pod ^.*$ containers false
+
+    # ---- Output: S3 (Garage) with Parquet compression ----
     [OUTPUT]
         Name                  s3
-        Match                 *
+        Match                 containers
         bucket                ${GARAGE_BUCKET}
         region                garage
         endpoint              ${GARAGE_S3_ENDPOINT}
         tls                   off
         tls.verify            off
         use_put_object        On
-        # Hive partitioning: /raw/containers/year=YYYY/month=MM/day=DD/hour=HH/uuid.json.gz
-        s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.json.gz
-        # Buffering: flush every 1MB or every 5 minutes (whichever first)
-        total_file_size       1M
-        upload_timeout        5m
-        # GZip compression for JSON
-        compression           gzip
+        Total_File_Size       5M
+        Upload_Timeout        5m
+        store_dir             /tmp/fluent-bit/s3
+        Use_Put_Object        On
+        compression           parquet
+        s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
         # S3 credentials from environment (injected via Secret)
 
   parsers.conf: |
