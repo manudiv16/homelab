@@ -16,6 +16,9 @@ spec:
       memory: 1Gi
   targetAllocator:
     enabled: false
+  env:
+    - name: ENABLE_FEATURE_GATES
+      value: receiver.kubeletstats.enableCPUUsageMetrics=true
   config:
     receivers:
       otlp:
@@ -31,6 +34,8 @@ spec:
         spike_limit_mib: 200
       batch:
         timeout: 10s
+        send_batch_size: 10000
+        send_batch_max_size: 15000
       k8sattributes:
         auth_type: serviceAccount
         extract:
@@ -48,6 +53,15 @@ spec:
     exporters:
       prometheusremotewrite:
         endpoint: http://192.168.4.79:9090/api/v1/write
+        sending_queue:
+          enabled: true
+          num_consumers: 3
+          queue_size: 1000
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
     service:
       pipelines:
         metrics:
