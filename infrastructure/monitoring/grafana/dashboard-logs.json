@@ -6,7 +6,7 @@
     "timezone": "browser",
     "schemaVersion": 40,
     "refresh": "1m",
-    "time": { "from": "now-1h", "to": "now" },
+    "time": { "from": "now-3h", "to": "now" },
     "panels": [
       {
         "id": 1,
@@ -27,7 +27,7 @@
         },
         "targets": [{
           "refId": "A",
-          "rawSql": "SELECT\n  date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,\n  namespace,\n  COUNT(*) AS log_count\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)\n        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')\n            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')\n  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ\nGROUP BY time_minute, namespace\nORDER BY time_minute"
+          "rawSql": "SELECT\n  date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,\n  namespace,\n  COUNT(*) AS log_count\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\nGROUP BY time_minute, namespace\nORDER BY time_minute"
         }]
       },
       {
@@ -39,7 +39,7 @@
         "options": { "showTime": true, "sortOrder": "descending" },
         "targets": [{
           "refId": "A",
-          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  log AS line,\n  namespace,\n  pod,\n  container,\n  node AS host\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)\n        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')\n            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')\n  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 5000"
+          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  log AS line,\n  namespace,\n  pod,\n  container,\n  node AS host\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 5000"
         }]
       },
       {
@@ -57,7 +57,7 @@
         "options": { "showHeader": true },
         "targets": [{
           "refId": "A",
-          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  reason,\n  message,\n  type,\n  object_kind,\n  namespace,\n  object_name\nFROM read_parquet(\n  's3://local-logs/raw/events/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)\n        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')\n            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')\n  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 500"
+          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  reason,\n  message,\n  type,\n  object_kind,\n  namespace,\n  object_name\nFROM read_parquet(\n  's3://local-logs/raw/events/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 500"
         }]
       }
     ]

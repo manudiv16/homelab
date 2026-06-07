@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Deploy Grafana logs dashboard via API."""
+"""Deploy Grafana Logs Browser dashboard via API.
+
+Usage:
+    python3 deploy-dashboard.py
+
+Requires:
+    - Grafana running at http://192.168.4.80:3000
+    - admin:admin credentials
+    - DuckDB datasource with UID P9EB6AA68509EF776
+"""
 import json
 import urllib.request
 import base64
@@ -18,16 +27,10 @@ def grafana_api(method, path, data=None):
     }
     body = json.dumps(data).encode() if data else None
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        err = json.loads(e.read())
-        print(f"HTTP {e.code}: {err}")
-        return err
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
 
 
-# Log volume by namespace (timeseries)
 LOG_VOLUME_SQL = """SELECT
   date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,
   namespace,
@@ -37,14 +40,10 @@ FROM read_parquet(
   hive_partitioning = true,
   union_by_name = true
 )
-WHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)
-        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')
-            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')
-  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ
+WHERE $__timeFilter(time::TIMESTAMPTZ)
 GROUP BY time_minute, namespace
 ORDER BY time_minute"""
 
-# Container logs (log panel)
 CONTAINER_LOGS_SQL = """SELECT
   time::TIMESTAMPTZ AS time,
   log AS line,
@@ -57,14 +56,10 @@ FROM read_parquet(
   hive_partitioning = true,
   union_by_name = true
 )
-WHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)
-        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')
-            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')
-  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ
+WHERE $__timeFilter(time::TIMESTAMPTZ)
 ORDER BY time::TIMESTAMPTZ DESC
 LIMIT 5000"""
 
-# Events table
 EVENTS_SQL = """SELECT
   time::TIMESTAMPTZ AS time,
   reason,
@@ -78,14 +73,11 @@ FROM read_parquet(
   hive_partitioning = true,
   union_by_name = true
 )
-WHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)
-        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')
-            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')
-  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ
+WHERE $__timeFilter(time::TIMESTAMPTZ)
 ORDER BY time::TIMESTAMPTZ DESC
 LIMIT 500"""
 
-dashboard = {
+DASHBOARD = {
     "dashboard": {
         "uid": "logs-browser",
         "title": "Logs Browser",
@@ -93,7 +85,7 @@ dashboard = {
         "timezone": "browser",
         "schemaVersion": 40,
         "refresh": "1m",
-        "time": {"from": "now-1h", "to": "now"},
+        "time": {"from": "now-3h", "to": "now"},
         "panels": [
             {
                 "id": 1,
@@ -144,5 +136,8 @@ dashboard = {
     "overwrite": True
 }
 
-result = grafana_api("POST", "/api/dashboards/db", dashboard)
-print(f"Dashboard result: {json.dumps(result, indent=2)}")
+
+if __name__ == "__main__":
+    result = grafana_api("POST", "/api/dashboards/db", DASHBOARD)
+    print(f"Dashboard: {result.get('status', 'error')} (v{result.get('version', '?')})")
+    print(f"URL: {result.get('url', '')}")
