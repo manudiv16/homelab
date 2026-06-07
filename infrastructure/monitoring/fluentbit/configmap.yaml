@@ -8,7 +8,7 @@ data:
     # ==============================================================
     # Fluentbit Aggregator Configuration
     # Receives logs from Fluentbit DaemonSet via Forward protocol
-    # Writes Parquet files to Garage (S3) with Hive partitioning
+    # Writes Parquet files to Scaleway S3 with Hive partitioning
     # ==============================================================
 
     [SERVICE]
@@ -40,15 +40,15 @@ data:
         Match         kube.*
         Rule          $pod ^.*$ containers false
 
-    # ---- Output: S3 (Garage) - containers ----
+    # ---- Output: S3 (Scaleway) - containers ----
     [OUTPUT]
         Name                  s3
         Match                 containers
-        bucket                ${GARAGE_BUCKET}
-        region                garage
-        endpoint              ${GARAGE_S3_ENDPOINT}
-        tls                   off
-        tls.verify            off
+        bucket                ${S3_BUCKET}
+        region                fr-par
+        endpoint              s3.fr-par.scw.cloud
+        tls                   on
+        tls.verify            on
         Total_File_Size       5M
         Upload_Timeout        5m
         store_dir             /tmp/fluent-bit/s3-containers
@@ -57,15 +57,15 @@ data:
         s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
         json_date_key         time
 
-    # ---- Output: S3 (Garage) - events ----
+    # ---- Output: S3 (Scaleway) - events ----
     [OUTPUT]
         Name                  s3
         Match                 kube_events
-        bucket                ${GARAGE_BUCKET}
-        region                garage
-        endpoint              ${GARAGE_S3_ENDPOINT}
-        tls                   off
-        tls.verify            off
+        bucket                ${S3_BUCKET}
+        region                fr-par
+        endpoint              s3.fr-par.scw.cloud
+        tls                   on
+        tls.verify            on
         Total_File_Size       5M
         Upload_Timeout        5m
         store_dir             /tmp/fluent-bit/s3-events

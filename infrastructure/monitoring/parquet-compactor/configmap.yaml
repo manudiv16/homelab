@@ -8,8 +8,7 @@ metadata:
   annotations:
     # Vendored from https://github.com/Heldroe/parquet-compactor
     # Local changes (search for "LOCAL CHANGE"):
-    #   1. s3_url_style='path'  (Garage on IP, no DNS wildcard)
-    #   2. boto3 endpoint preserves scheme  (HTTP, not HTTPS)
+    #   1. INSTALL httpfs/aws at runtime (upstream Dockerfile pre-installs)
     upstream-repo: "https://github.com/Heldroe/parquet-compactor"
 data:
   compactor.py: |
@@ -29,8 +28,6 @@ data:
 
     raw_endpoint = os.getenv("S3_ENDPOINT")
     S3_ENDPOINT = re.sub(r"^https?://", "", raw_endpoint).rstrip("/") if raw_endpoint else None
-    # LOCAL CHANGE: preserve scheme for boto3 (Garage uses HTTP on LAN)
-    S3_SCHEME = "https" if (raw_endpoint or "").lower().startswith("https://") else "http"
     S3_REGION = os.getenv("S3_REGION")
     BUCKET = os.getenv("BUCKET_NAME", "logs")
 
@@ -92,8 +89,7 @@ data:
     if DELETE_FILES:
         boto3_kwargs = {}
         if raw_endpoint:
-            # LOCAL CHANGE: use detected scheme instead of hardcoded https
-            boto3_kwargs["endpoint_url"] = f"{S3_SCHEME}://{S3_ENDPOINT}"
+            boto3_kwargs["endpoint_url"] = f"https://{S3_ENDPOINT}"
         if S3_REGION:
             boto3_kwargs["region_name"] = S3_REGION
 
@@ -123,11 +119,6 @@ data:
 
         if S3_ENDPOINT:
             con.execute(f"SET s3_endpoint='{S3_ENDPOINT}';")
-            # LOCAL CHANGE: path style for Garage on bare IP
-            con.execute("SET s3_url_style='path';")
-            # LOCAL CHANGE: disable TLS for Garage HTTP endpoint
-            if S3_SCHEME == "http":
-                con.execute("SET s3_use_ssl=false;")
         if S3_REGION:
             con.execute(f"SET s3_region='{S3_REGION}';")
 

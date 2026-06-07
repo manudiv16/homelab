@@ -43,11 +43,11 @@ spec:
                 - name: MODE
                   value: "daily"
                 - name: S3_ENDPOINT
-                  value: "http://192.168.4.76:3900"
+                  value: "https://s3.fr-par.scw.cloud"
                 - name: S3_REGION
-                  value: "garage"
+                  value: "fr-par"
                 - name: BUCKET_NAME
-                  value: "logs"
+                  value: "local-logs"
                 - name: CATEGORIES
                   value: "containers"
                 - name: DELETE_FILES

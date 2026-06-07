@@ -34,13 +34,11 @@ spec:
             - name: buffers
               mountPath: /var/fluent-bit/buffers
           env:
-            - name: GARAGE_S3_ENDPOINT
-              value: "http://192.168.4.76:3900"
-            - name: GARAGE_BUCKET
-              value: "logs"
+            - name: S3_BUCKET
+              value: "local-logs"
           envFrom:
             - secretRef:
-                name: garage-credentials
+                name: s3-credentials
       volumes:
         - name: config
           configMap:
