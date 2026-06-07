@@ -19,7 +19,7 @@ spec:
       serviceAccountName: fluentbit-cluster-events
       containers:
         - name: fluentbit
-          image: public.ecr.aws/aws-observability/aws-for-fluent-bit:3.0.0
+          image: fluent/fluent-bit:4.1.1
           resources:
             requests:
               cpu: 20m

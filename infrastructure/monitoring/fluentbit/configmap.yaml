@@ -40,13 +40,6 @@ data:
         Match         kube.*
         Rule          $pod ^.*$ containers false
 
-    # ---- Filter: Rename message -> log for container logs ----
-    # (AWS CRI parser names the log field 'message' instead of 'log')
-    [FILTER]
-        Name          modify
-        Match         containers
-        Rename        message         log
-
     # ---- Filter: Enforce fixed Parquet schema for containers ----
     [FILTER]
         Name          record_modifier
