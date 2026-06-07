@@ -1,0 +1,79 @@
+{
+  "dashboard": {
+    "uid": "logs-browser",
+    "title": "Logs Browser",
+    "tags": ["logs", "fluentbit"],
+    "timezone": "browser",
+    "schemaVersion": 40,
+    "refresh": "30s",
+    "time": { "from": "now-1h", "to": "now" },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Log Volume by Namespace",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+        "datasource": { "uid": "P9EB6AA68509EF776" },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "fillOpacity": 30,
+              "spanNulls": true,
+              "showPoints": "never"
+            }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi" },
+          "legend": { "displayMode": "table", "placement": "right" }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "rawSql": "SELECT\n  date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,\n  namespace,\n  COUNT(*) AS c\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning=true,\n  union_by_name=true\n)\nWHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)\n        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')\n            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')\n  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ\nGROUP BY time_minute, namespace\nORDER BY time_minute, namespace"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Logs",
+        "type": "logs",
+        "gridPos": { "h": 12, "w": 24, "x": 0, "y": 8 },
+        "datasource": { "uid": "P9EB6AA68509EF776" },
+        "options": {
+          "showTime": true,
+          "sortOrder": "descending",
+          "dedupStrategy": "none"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  log AS line,\n  namespace AS namespace,\n  pod AS pod,\n  container AS container,\n  node AS host\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning=true,\n  union_by_name=true\n)\nWHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)\n        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')\n            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')\n  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 5000"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Kubernetes Events",
+        "type": "table",
+        "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+        "datasource": { "uid": "P9EB6AA68509EF776" },
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "message" }, "properties": [{ "id": "custom.width", "value": 400 }] }
+          ]
+        },
+        "options": { "showHeader": true },
+        "targets": [
+          {
+            "refId": "A",
+            "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  reason,\n  message,\n  type,\n  object_kind,\n  namespace,\n  object_name\nFROM read_parquet(\n  's3://local-logs/raw/events/*/*/*/*/*.parquet',\n  hive_partitioning=true,\n  union_by_name=true\n)\nWHERE make_timestamp(year::BIGINT, month::BIGINT, day::BIGINT, hour::BIGINT, 0, 0)\n        BETWEEN date_trunc('hour', ${__from:date:iso}::TIMESTAMPTZ - INTERVAL '1 hour')\n            AND date_trunc('hour', ${__to:date:iso}::TIMESTAMPTZ + INTERVAL '1 hour')\n  AND time::TIMESTAMPTZ BETWEEN ${__from:date:iso}::TIMESTAMPTZ AND ${__to:date:iso}::TIMESTAMPTZ\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 500"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}
