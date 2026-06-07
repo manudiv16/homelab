@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentbit-events-config
+  namespace: monitoring
+data:
+  fluent-bit.conf: |
+    # ==============================================================
+    # Fluentbit Cluster-Events Configuration
+    # Reads Kubernetes events from the API server (single Deployment,
+    # 1 replica to avoid duplicate logs).
+    # Forwards to Aggregator which writes Parquet to Garage S3.
+    # Schema (fixed via Allowlist): id, namespace, object_name,
+    #   object_kind, action, reason, message, type
+    # `time` is injected by the aggregator S3 output (json_date_key).
+    # ==============================================================
+
+    [SERVICE]
+        flush         5
+        daemon        off
+        log_level     info
+        http_server   off
+
+    # ---- Input: Kubernetes Events from API server ----
+    [INPUT]
+        Name  kubernetes_events
+        Tag   kube_events
+
+    # ---- Filter: Lift involvedObject fields to root ----
+    [FILTER]
+        Name         nest
+        Match        kube_events
+        Operation    lift
+        Nested_under involvedObject
+        Add_prefix   inv_
+
+    # ---- Filter: Rename and add defaults ----
+    [FILTER]
+        Name       modify
+        Match      kube_events
+        Rename     inv_namespace  namespace
+        Rename     inv_name       object_name
+        Rename     inv_kind       object_kind
+        Add        namespace      unknown
+        Add        object_name    unknown
+        Add        object_kind    unknown
+        Add        action         unknown
+        Add        reason         unknown
+        Add        message        ""
+        Add        type           unknown
+
+    # ---- Filter: Fixed schema via allowlist ----
+    [FILTER]
+        Name          record_modifier
+        Match         kube_events
+        UUID_Key      id
+        Allowlist_key id
+        Allowlist_key namespace
+        Allowlist_key object_name
+        Allowlist_key object_kind
+        Allowlist_key action
+        Allowlist_key reason
+        Allowlist_key message
+        Allowlist_key type
+
+    # ---- Output: Forward to Aggregator ----
+    [OUTPUT]
+        Name                 forward
+        Match                kube_events
+        Host                 fluentbit-aggregator
+        Port                 24224
+        Retry_Limit          10
+        Require_ack_response True

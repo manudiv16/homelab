@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: parquet-compactor-daily
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: parquet-compactor
+    app.kubernetes.io/component: daily
+spec:
+  # Runs daily at 01:30 UTC, merges yesterday's hourly files.
+  schedule: "30 1 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 172800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: parquet-compactor
+            app.kubernetes.io/component: daily
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          containers:
+            - name: compactor
+              image: python:3.14-slim
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  pip install --quiet --no-cache-dir --user boto3==1.43.5 duckdb==1.5.2
+                  exec python /script/compactor.py
+              env:
+                - name: MODE
+                  value: "daily"
+                - name: S3_ENDPOINT
+                  value: "http://192.168.4.76:3900"
+                - name: S3_REGION
+                  value: "garage"
+                - name: BUCKET_NAME
+                  value: "logs"
+                - name: CATEGORIES
+                  value: "containers"
+                - name: DELETE_FILES
+                  value: "true"
+                - name: WATERMARK_ENABLED
+                  value: "true"
+                - name: HOURLY_PREFIX
+                  value: "hourly"
+                - name: DAILY_PREFIX
+                  value: "daily"
+                - name: HOME
+                  value: "/home/compactor"
+              envFrom:
+                - secretRef:
+                    name: parquet-compactor-credentials
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                - name: home
+                  mountPath: /home/compactor
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 1
+                  memory: 1Gi
+          volumes:
+            - name: script
+              configMap:
+                name: parquet-compactor-script
+                defaultMode: 0555
+            - name: home
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}

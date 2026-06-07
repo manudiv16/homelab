@@ -40,7 +40,7 @@ data:
         Match         kube.*
         Rule          $pod ^.*$ containers false
 
-    # ---- Output: S3 (Garage) with Parquet compression ----
+    # ---- Output: S3 (Garage) - containers ----
     [OUTPUT]
         Name                  s3
         Match                 containers
@@ -51,23 +51,28 @@ data:
         tls.verify            off
         Total_File_Size       5M
         Upload_Timeout        5m
-        store_dir             /tmp/fluent-bit/s3
+        store_dir             /tmp/fluent-bit/s3-containers
         use_put_object        On
         compression           parquet
         s3_key_format         /raw/containers/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
-        # S3 credentials from environment (injected via Secret)
+        json_date_key         time
 
-    # ---- Debug: stdout for kube records ----
+    # ---- Output: S3 (Garage) - events ----
     [OUTPUT]
-        Name                  stdout
-        Match                 kube.*
-        format                json_lines
-
-    # ---- Debug: stdout for containers records ----
-    [OUTPUT]
-        Name                  stdout
-        Match                 containers
-        format                json_lines
+        Name                  s3
+        Match                 kube_events
+        bucket                ${GARAGE_BUCKET}
+        region                garage
+        endpoint              ${GARAGE_S3_ENDPOINT}
+        tls                   off
+        tls.verify            off
+        Total_File_Size       5M
+        Upload_Timeout        5m
+        store_dir             /tmp/fluent-bit/s3-events
+        use_put_object        On
+        compression           parquet
+        s3_key_format         /raw/events/year=%Y/month=%m/day=%d/hour=%H/$UUID.parquet
+        json_date_key         time
 
   parsers.conf: |
     # No custom parsers needed — Aggregator receives structured records from DaemonSet

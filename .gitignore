@@ -32,6 +32,7 @@ Thumbs.db
 
 # Monitoring secrets — never commit Garage S3 credentials
 infrastructure/monitoring/fluentbit/secret.yaml
+infrastructure/monitoring/parquet-compactor/secret.yaml
 
 # IDE
 .idea/

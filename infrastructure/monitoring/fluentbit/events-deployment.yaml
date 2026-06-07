@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluentbit-cluster-events
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: fluentbit-cluster-events
+spec:
+  # Must remain 1 — multiple replicas would produce duplicate event logs
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fluentbit-cluster-events
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fluentbit-cluster-events
+    spec:
+      serviceAccountName: fluentbit-cluster-events
+      containers:
+        - name: fluentbit
+          image: public.ecr.aws/aws-observability/aws-for-fluent-bit:3.0.0
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc
+      volumes:
+        - name: config
+          configMap:
+            name: fluentbit-events-config
