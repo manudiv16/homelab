@@ -108,8 +108,6 @@ data:
         con = duckdb.connect(":memory:")
         # LOCAL CHANGE: INSTALL at runtime (upstream Dockerfile pre-installs;
         # we use plain python:3.14-slim base)
-        con.execute("INSTALL httpfs;")
-        con.execute("INSTALL aws;")
         con.execute("LOAD httpfs;")
         con.execute("LOAD aws;")
         con.execute("SET threads = 2;")
@@ -119,6 +117,7 @@ data:
 
         if S3_ENDPOINT:
             con.execute(f"SET s3_endpoint='{S3_ENDPOINT}';")
+            con.execute("SET s3_url_style='vhost';")
         if S3_REGION:
             con.execute(f"SET s3_region='{S3_REGION}';")
 

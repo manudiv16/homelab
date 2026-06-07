@@ -7,8 +7,8 @@ metadata:
     app.kubernetes.io/name: parquet-compactor
     app.kubernetes.io/component: daily
 spec:
-  # Runs daily at 01:30 UTC, merges yesterday's hourly files.
-  schedule: "30 1 * * *"
+  # Runs daily at 02:30 UTC, merges yesterday's hourly files.
+  schedule: "30 2 * * *"
   timeZone: "Etc/UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
@@ -25,20 +25,10 @@ spec:
             app.kubernetes.io/component: daily
         spec:
           restartPolicy: OnFailure
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            fsGroup: 1000
           containers:
             - name: compactor
-              image: python:3.14-slim
-              command: ["/bin/sh", "-c"]
-              args:
-                - |
-                  set -e
-                  pip install --quiet --no-cache-dir --user boto3==1.43.5 duckdb==1.5.2
-                  exec python /script/compactor.py
+              image: ghcr.io/heldroe/parquet-compactor:sha-14b9322
+              command: ["python", "/script/compactor.py"]
               env:
                 - name: MODE
                   value: "daily"
@@ -49,7 +39,7 @@ spec:
                 - name: BUCKET_NAME
                   value: "local-logs"
                 - name: CATEGORIES
-                  value: "containers"
+                  value: "containers,events"
                 - name: DELETE_FILES
                   value: "true"
                 - name: WATERMARK_ENABLED
@@ -58,16 +48,12 @@ spec:
                   value: "hourly"
                 - name: DAILY_PREFIX
                   value: "daily"
-                - name: HOME
-                  value: "/home/compactor"
               envFrom:
                 - secretRef:
                     name: parquet-compactor-credentials
               volumeMounts:
                 - name: script
                   mountPath: /script
-                - name: home
-                  mountPath: /home/compactor
                 - name: tmp
                   mountPath: /tmp
               resources:
@@ -82,7 +68,5 @@ spec:
               configMap:
                 name: parquet-compactor-script
                 defaultMode: 0555
-            - name: home
-              emptyDir: {}
             - name: tmp
               emptyDir: {}
