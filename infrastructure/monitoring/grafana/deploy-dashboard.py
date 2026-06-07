@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy Grafana Logs Browser dashboard via API.
-
-Usage:
-    python3 deploy-dashboard.py
-"""
+"""Deploy Grafana Logs Browser dashboard via API."""
 import json
 import urllib.request
 import base64
@@ -15,10 +11,12 @@ DUCKDB_UID = "P9EB6AA68509EF776"
 
 
 def grafana_api(method, path, data=None):
-    url = f"{GRAFANA_URL}{path}"
+    url = "{}{}".format(GRAFANA_URL, path)
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Basic {base64.b64encode(f'{GRAFANA_USER}:{GRAFANA_PASS}'.encode()).decode()}"
+        "Authorization": "Basic {}".format(
+            base64.b64encode("{}:{}".format(GRAFANA_USER, GRAFANA_PASS).encode()).decode()
+        )
     }
     body = json.dumps(data).encode() if data else None
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
@@ -27,28 +25,38 @@ def grafana_api(method, path, data=None):
 
 
 # Log level extraction from JSON or CRI-style logs
+# JSON: {"level":"info"} -> json_extract_string
+# CRI:  [2026/06/07] [error] [upstream] -> regexp_extract
 LEVEL_EXPR = """CASE
   WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')
   WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')
   ELSE 'unknown'
 END"""
 
-LEVEL_VAR_SQL = f"""SELECT DISTINCT lvl FROM (
-  SELECT {LEVEL_EXPR} AS lvl
-  FROM read_parquet('s3://local-logs/raw/containers/*/*/*/*/*.parquet', hive_partitioning=true, union_by_name=true)
+LEVEL_VAR_SQL = """SELECT DISTINCT lvl FROM (
+  SELECT {}
+  FROM read_parquet(
+    's3://local-logs/raw/containers/*/*/*/*/*.parquet',
+    hive_partitioning = true,
+    union_by_name = true
+  )
   WHERE $__timeFilter(time::TIMESTAMPTZ)
-) WHERE lvl IS NOT NULL ORDER BY lvl"""
+) WHERE lvl IS NOT NULL ORDER BY lvl""".format(LEVEL_EXPR + " AS lvl")
 
 NAMESPACE_VAR_SQL = """SELECT DISTINCT namespace
-FROM read_parquet('s3://local-logs/raw/containers/*/*/*/*/*.parquet', hive_partitioning=true, union_by_name=true)
+FROM read_parquet(
+  's3://local-logs/raw/containers/*/*/*/*/*.parquet',
+  hive_partitioning = true,
+  union_by_name = true
+)
 WHERE $__timeFilter(time::TIMESTAMPTZ)
 ORDER BY namespace"""
 
-# When All is selected $var = '$__all' (literal), bypass filter.
-NS_FILTER = "('$namespace' = '$__all' OR namespace = '$namespace')"
-LEVEL_FILTER = f"('$level' = '$__all' OR {LEVEL_EXPR} = '$level')"
+# Filter pattern: empty string = All (bypass), specific value = filter
+NS_FILTER = "('$namespace' = '' OR namespace = '$namespace')"
+LEVEL_FILTER = "('$level' = '' OR {} = '$level')".format(LEVEL_EXPR)
 
-LOG_VOLUME_SQL = f"""SELECT
+LOG_VOLUME_SQL = """SELECT
   date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,
   namespace,
   COUNT(*) AS log_count
@@ -58,29 +66,29 @@ FROM read_parquet(
   union_by_name = true
 )
 WHERE $__timeFilter(time::TIMESTAMPTZ)
-  AND {NS_FILTER}
-  AND {LEVEL_FILTER}
+  AND {}
+  AND {}
 GROUP BY time_minute, namespace
-ORDER BY time_minute"""
+ORDER BY time_minute""".format(NS_FILTER, LEVEL_FILTER)
 
-CONTAINER_LOGS_SQL = f"""SELECT
+CONTAINER_LOGS_SQL = """SELECT
   time::TIMESTAMPTZ AS time,
   log AS line,
   namespace,
   pod,
   container,
   node AS host,
-  {LEVEL_EXPR} AS level
+  {} AS level
 FROM read_parquet(
   's3://local-logs/raw/containers/*/*/*/*/*.parquet',
   hive_partitioning = true,
   union_by_name = true
 )
 WHERE $__timeFilter(time::TIMESTAMPTZ)
-  AND {NS_FILTER}
-  AND {LEVEL_FILTER}
+  AND {}
+  AND {}
 ORDER BY time::TIMESTAMPTZ DESC
-LIMIT 5000"""
+LIMIT 5000""".format(LEVEL_EXPR, NS_FILTER, LEVEL_FILTER)
 
 EVENTS_SQL = """SELECT
   time::TIMESTAMPTZ AS time,
@@ -96,9 +104,9 @@ FROM read_parquet(
   union_by_name = true
 )
 WHERE $__timeFilter(time::TIMESTAMPTZ)
-  AND ('$namespace' = '$__all' OR namespace = '$namespace')
+  AND {}
 ORDER BY time::TIMESTAMPTZ DESC
-LIMIT 500"""
+LIMIT 500""".format(NS_FILTER)
 
 DASHBOARD = {
     "dashboard": {
@@ -117,6 +125,7 @@ DASHBOARD = {
                     "datasource": {"uid": DUCKDB_UID},
                     "query": NAMESPACE_VAR_SQL,
                     "includeAll": True,
+                    "allValue": "",
                     "current": {"text": "All", "value": "$__all"},
                     "refresh": 2,
                     "sort": 1
@@ -127,6 +136,7 @@ DASHBOARD = {
                     "datasource": {"uid": DUCKDB_UID},
                     "query": LEVEL_VAR_SQL,
                     "includeAll": True,
+                    "allValue": "",
                     "current": {"text": "All", "value": "$__all"},
                     "refresh": 2,
                     "sort": 1
@@ -186,5 +196,5 @@ DASHBOARD = {
 
 if __name__ == "__main__":
     result = grafana_api("POST", "/api/dashboards/db", DASHBOARD)
-    print(f"Dashboard: {result.get('status', 'error')} (v{result.get('version', '?')})")
-    print(f"URL: {result.get('url', '')}")
+    print("Dashboard: {} (v{})".format(result.get('status', 'error'), result.get('version', '?')))
+    print("URL: {}".format(result.get('url', '')))
