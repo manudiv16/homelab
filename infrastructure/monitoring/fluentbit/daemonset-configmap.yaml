@@ -62,6 +62,12 @@ data:
         Rename              k8s_container_name  container
         Rename              k8s_host            node
 
+    # ---- Filter: Rename message -> log (AWS CRI parser uses 'message' instead of 'log') ----
+    [FILTER]
+        Name                modify
+        Match               kube.*
+        Rename              message             log
+
     # ---- Filter: Add default values for missing fields ----
     [FILTER]
         Name                modify
@@ -70,20 +76,20 @@ data:
         Add                 pod        unknown
         Add                 container  unknown
         Add                 node       unknown
+        Add                 log        ""
 
     # ---- Filter: Ensure fixed schema with allowlist ----
     [FILTER]
         Name                record_modifier
         Match               kube.*
         UUID_Key            id
-        # TEMPORARY: Disable Allowlist to debug log field
-        # Allowlist_key       time
-        # Allowlist_key       id
-        # Allowlist_key       namespace
-        # Allowlist_key       pod
-        # Allowlist_key       container
-        # Allowlist_key       node
-        # Allowlist_key       log
+        Allowlist_key       time
+        Allowlist_key       id
+        Allowlist_key       namespace
+        Allowlist_key       pod
+        Allowlist_key       container
+        Allowlist_key       node
+        Allowlist_key       log
 
     # ---- Output: Forward to Aggregator ----
     [OUTPUT]
