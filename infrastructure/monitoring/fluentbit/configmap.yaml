@@ -40,6 +40,12 @@ data:
         Match         kube.*
         Rule          $pod ^.*$ containers false
 
+    # ---- DEBUG: Output to stdout to inspect records ----
+    [OUTPUT]
+        Name                  stdout
+        Match                 containers
+        format                json_lines
+
     # ---- Output: S3 (Scaleway) - containers ----
     [OUTPUT]
         Name                  s3
