@@ -76,13 +76,14 @@ data:
         Name                record_modifier
         Match               kube.*
         UUID_Key            id
-        Allowlist_key       time
-        Allowlist_key       id
-        Allowlist_key       namespace
-        Allowlist_key       pod
-        Allowlist_key       container
-        Allowlist_key       node
-        Allowlist_key       log
+        # TEMPORARY: Disable Allowlist to debug log field
+        # Allowlist_key       time
+        # Allowlist_key       id
+        # Allowlist_key       namespace
+        # Allowlist_key       pod
+        # Allowlist_key       container
+        # Allowlist_key       node
+        # Allowlist_key       log
 
     # ---- Output: Forward to Aggregator ----
     [OUTPUT]
