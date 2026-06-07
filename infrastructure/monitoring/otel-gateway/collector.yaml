@@ -53,6 +53,8 @@ spec:
     exporters:
       prometheusremotewrite:
         endpoint: http://192.168.4.79:9090/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
         remote_write_queue:
           enabled: true
           queue_size: 10000
