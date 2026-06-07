@@ -40,6 +40,38 @@ data:
         Match         kube.*
         Rule          $pod ^.*$ containers false
 
+    # ---- Filter: Rename message -> log for container logs ----
+    # (AWS CRI parser names the log field 'message' instead of 'log')
+    [FILTER]
+        Name          modify
+        Match         containers
+        Rename        message         log
+
+    # ---- Filter: Enforce fixed Parquet schema for containers ----
+    [FILTER]
+        Name          record_modifier
+        Match         containers
+        Allowlist_key time
+        Allowlist_key id
+        Allowlist_key namespace
+        Allowlist_key pod
+        Allowlist_key container
+        Allowlist_key node
+        Allowlist_key log
+
+    # ---- Filter: Enforce fixed Parquet schema for events ----
+    [FILTER]
+        Name          record_modifier
+        Match         kube_events
+        Allowlist_key id
+        Allowlist_key namespace
+        Allowlist_key object_name
+        Allowlist_key object_kind
+        Allowlist_key action
+        Allowlist_key reason
+        Allowlist_key message
+        Allowlist_key type
+
     # ---- Output: S3 (Scaleway) - containers ----
     [OUTPUT]
         Name                  s3
