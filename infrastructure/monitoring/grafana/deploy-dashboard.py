@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy Grafana Logs Browser dashboard via API."""
+"""Deploy Grafana Logs Browser dashboard with multi-value variables using IN clause."""
 import json
 import urllib.request
 import base64
@@ -24,9 +24,7 @@ def grafana_api(method, path, data=None):
         return json.loads(resp.read())
 
 
-# Log level extraction from JSON or CRI-style logs
-# JSON: {"level":"info"} -> json_extract_string
-# CRI:  [2026/06/07] [error] [upstream] -> regexp_extract
+# Log level extraction
 LEVEL_EXPR = """CASE
   WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')
   WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')
@@ -34,27 +32,20 @@ LEVEL_EXPR = """CASE
 END"""
 
 LEVEL_VAR_SQL = """SELECT DISTINCT lvl FROM (
-  SELECT {}
-  FROM read_parquet(
-    's3://local-logs/raw/containers/*/*/*/*/*.parquet',
-    hive_partitioning = true,
-    union_by_name = true
-  )
+  SELECT {} AS lvl
+  FROM read_parquet('s3://local-logs/raw/containers/*/*/*/*/*.parquet', hive_partitioning=true, union_by_name=true)
   WHERE $__timeFilter(time::TIMESTAMPTZ)
-) WHERE lvl IS NOT NULL ORDER BY lvl""".format(LEVEL_EXPR + " AS lvl")
+) WHERE lvl IS NOT NULL ORDER BY lvl""".format(LEVEL_EXPR)
 
 NAMESPACE_VAR_SQL = """SELECT DISTINCT namespace
-FROM read_parquet(
-  's3://local-logs/raw/containers/*/*/*/*/*.parquet',
-  hive_partitioning = true,
-  union_by_name = true
-)
+FROM read_parquet('s3://local-logs/raw/containers/*/*/*/*/*.parquet', hive_partitioning=true, union_by_name=true)
 WHERE $__timeFilter(time::TIMESTAMPTZ)
 ORDER BY namespace"""
 
-# Filter pattern: empty string = All (bypass), specific value = filter
-NS_FILTER = "('$namespace' = '' OR namespace = '$namespace')"
-LEVEL_FILTER = "('$level' = '' OR {} = '$level')".format(LEVEL_EXPR)
+# Multi-value variables + IN clause
+# When All selected, Grafana expands to all values: namespace IN ('argocd','kube-system',...)
+NS_FILTER = "namespace IN ($namespace)"
+LEVEL_FILTER = "{} IN ($level)".format(LEVEL_EXPR)
 
 LOG_VOLUME_SQL = """SELECT
   date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,
@@ -125,7 +116,7 @@ DASHBOARD = {
                     "datasource": {"uid": DUCKDB_UID},
                     "query": NAMESPACE_VAR_SQL,
                     "includeAll": True,
-                    "allValue": "",
+                    "multi": True,
                     "current": {"text": "All", "value": "$__all"},
                     "refresh": 2,
                     "sort": 1
@@ -136,7 +127,7 @@ DASHBOARD = {
                     "datasource": {"uid": DUCKDB_UID},
                     "query": LEVEL_VAR_SQL,
                     "includeAll": True,
-                    "allValue": "",
+                    "multi": True,
                     "current": {"text": "All", "value": "$__all"},
                     "refresh": 2,
                     "sort": 1

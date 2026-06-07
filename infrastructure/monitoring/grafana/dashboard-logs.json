@@ -15,7 +15,7 @@
           "datasource": { "type": "motherduck-duckdb-datasource", "uid": "P9EB6AA68509EF776" },
           "query": "SELECT DISTINCT namespace\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\nORDER BY namespace",
           "includeAll": true,
-          "allValue": "",
+          "multi": true,
           "current": { "text": "All", "value": "$__all" },
           "refresh": 2,
           "sort": 1
@@ -26,7 +26,7 @@
           "datasource": { "type": "motherduck-duckdb-datasource", "uid": "P9EB6AA68509EF776" },
           "query": "SELECT DISTINCT lvl FROM (\n  SELECT CASE\n    WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n    WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n    ELSE 'unknown'\n  END AS lvl\n  FROM read_parquet(\n    's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n    hive_partitioning = true,\n    union_by_name = true\n  )\n  WHERE $__timeFilter(time::TIMESTAMPTZ)\n) WHERE lvl IS NOT NULL ORDER BY lvl",
           "includeAll": true,
-          "allValue": "",
+          "multi": true,
           "current": { "text": "All", "value": "$__all" },
           "refresh": 2,
           "sort": 1
@@ -53,7 +53,7 @@
         },
         "targets": [{
           "refId": "A",
-          "rawSql": "SELECT\n  date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,\n  namespace,\n  COUNT(*) AS log_count\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\n  AND ('$namespace' = '' OR namespace = '$namespace')\n  AND ('$level' = '' OR\n    CASE\n      WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n      WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n      ELSE 'unknown'\n    END = '$level')\nGROUP BY time_minute, namespace\nORDER BY time_minute"
+          "rawSql": "SELECT\n  date_trunc('minute', time::TIMESTAMPTZ) AS time_minute,\n  namespace,\n  COUNT(*) AS log_count\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\n  AND namespace IN ($namespace)\n  AND CASE\n    WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n    WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n    ELSE 'unknown'\n  END IN ($level)\nGROUP BY time_minute, namespace\nORDER BY time_minute"
         }]
       },
       {
@@ -65,7 +65,7 @@
         "options": { "showTime": true, "sortOrder": "descending" },
         "targets": [{
           "refId": "A",
-          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  log AS line,\n  namespace,\n  pod,\n  container,\n  node AS host,\n  CASE\n    WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n    WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n    ELSE 'unknown'\n  END AS level\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\n  AND ('$namespace' = '' OR namespace = '$namespace')\n  AND ('$level' = '' OR\n    CASE\n      WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n      WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n      ELSE 'unknown'\n    END = '$level')\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 5000"
+          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  log AS line,\n  namespace,\n  pod,\n  container,\n  node AS host,\n  CASE\n    WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n    WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n    ELSE 'unknown'\n  END AS level\nFROM read_parquet(\n  's3://local-logs/raw/containers/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\n  AND namespace IN ($namespace)\n  AND CASE\n    WHEN log LIKE '{%}' THEN COALESCE(NULLIF(json_extract_string(log, '$.level'), ''), 'unknown')\n    WHEN log ~ '\\[(\\w+)\\]' THEN COALESCE(NULLIF(regexp_extract(log, '\\[(\\w+)\\]', 1), ''), 'unknown')\n    ELSE 'unknown'\n  END IN ($level)\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 5000"
         }]
       },
       {
@@ -83,7 +83,7 @@
         "options": { "showHeader": true },
         "targets": [{
           "refId": "A",
-          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  reason,\n  message,\n  type,\n  object_kind,\n  namespace,\n  object_name\nFROM read_parquet(\n  's3://local-logs/raw/events/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\n  AND ('$namespace' = '' OR namespace = '$namespace')\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 500"
+          "rawSql": "SELECT\n  time::TIMESTAMPTZ AS time,\n  reason,\n  message,\n  type,\n  object_kind,\n  namespace,\n  object_name\nFROM read_parquet(\n  's3://local-logs/raw/events/*/*/*/*/*.parquet',\n  hive_partitioning = true,\n  union_by_name = true\n)\nWHERE $__timeFilter(time::TIMESTAMPTZ)\n  AND namespace IN ($namespace)\nORDER BY time::TIMESTAMPTZ DESC\nLIMIT 500"
         }]
       }
     ]
