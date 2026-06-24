@@ -25,7 +25,7 @@ spec:
             - --cluster-id=homelab
             - --listener-url=tcp://0.0.0.0:9092
             - --advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
-            - --storage-engine=s3://local-logs/tansu/
+            - --storage-engine=memory://tansu/
           ports:
             - name: kafka
               containerPort: 9092
