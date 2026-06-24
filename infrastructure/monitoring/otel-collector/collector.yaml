@@ -66,8 +66,8 @@ spec:
         multiline:
           # Combine continuation lines into the preceding log entry.
           # Broad pattern covering Java, Go, Python, Node.js stack traces.
+          # OTel filelog receiver no soporta flush_after timeout.
           line_start_pattern: '^(\d{4}-\d{2}-\d{2}|[IWEF]\d{4}|Traceback|panic|goroutine \d+)'
-          flush_after: 5s
         operators:
           # Step 1: Parse CRI log format
           # Input:  "2026-06-24T10:15:30.123456789Z stdout F {\"level\":\"info\"}"
