@@ -28,7 +28,7 @@ spec:
             - --kafka-cluster-id=homelab
             - --kafka-listener-url=tcp://0.0.0.0:9092
             - --kafka-advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
-            - --storage-engine=memory://tansu/
+            - --storage-engine=s3://local-logs/tansu/
           ports:
             - name: kafka
               containerPort: 9092
@@ -49,6 +49,10 @@ spec:
                 secretKeyRef:
                   name: tansu-secrets
                   key: s3-secret-key
+            - name: AWS_ENDPOINT
+              value: "https://s3.fr-par.scw.cloud"
+            - name: AWS_DEFAULT_REGION
+              value: "fr-par"
           resources:
             requests:
               cpu: 100m
