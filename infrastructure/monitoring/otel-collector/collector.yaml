@@ -213,10 +213,7 @@ spec:
         topic: otel-logs
         encoding: otlp_proto
         protocol_version: 2.0.0
-        # metadata.full=false evita que el exporter falle en startup
-        # si Tansu no está disponible aún. Solo conecta al producir.
         metadata:
-          full: false
           retry:
             max: 10
             backoff: 3s
