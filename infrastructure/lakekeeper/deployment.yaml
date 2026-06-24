@@ -23,7 +23,7 @@ spec:
       initContainers:
         - name: migrate
           image: quay.io/lakekeeper/catalog:latest
-          command: ["migrate"]
+          args: ["migrate"]
           env:
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
               value: "postgresql://lakekeeper:$(POSTGRES_PASSWORD)@lakekeeper-pg.monitoring.svc.cluster.local:5432/lakekeeper"
