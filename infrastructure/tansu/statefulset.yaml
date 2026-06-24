@@ -20,15 +20,12 @@ spec:
       serviceAccountName: tansu-broker
       containers:
         - name: tansu
-          image: ghcr.io/tansu-io/tansu:0.2.2
-          # El binary es tansu-server (entrypoint del container).
-          # En esta build NO hay subcomandos (broker/iceberg/cat/etc).
-          # Los args se pasan directamente:
+          image: ghcr.io/tansu-io/tansu:0.6.0
           args:
-            - --kafka-cluster-id=homelab
-            - --kafka-listener-url=tcp://0.0.0.0:9092
-            - --kafka-advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
-            - --storage-engine=memory://tansu/
+            - --cluster-id=homelab
+            - --listener-url=tcp://0.0.0.0:9092
+            - --advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
+            - --storage-engine=s3://local-logs/tansu/
           ports:
             - name: kafka
               containerPort: 9092
@@ -70,11 +67,4 @@ spec:
               port: 9092
             initialDelaySeconds: 30
             periodSeconds: 30
-  volumeClaimTemplates:
-    - metadata:
-        name: tansu-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
+
