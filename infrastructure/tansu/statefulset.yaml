@@ -26,14 +26,17 @@ spec:
           args:
             - "--all-features"
           env:
-            # ── Storage backend: PostgreSQL ──
+            # ── Storage backend: SQLite (simple, no external DB needed) ──
+            # Migrate to PostgreSQL for production: set TANSU_STORAGE_ENGINE=postgres
+            # and provide DSN via tansu-secrets.postgres-dsn
             - name: TANSU_STORAGE_ENGINE
-              value: "postgres"
+              value: "sqlite:///var/lib/tansu/tansu.db"
             - name: TANSU_STORAGE_POSTGRES_DSN
               valueFrom:
                 secretKeyRef:
                   name: tansu-secrets
                   key: postgres-dsn
+                optional: true
             # ── Kafka-compatible broker ──
             - name: TANSU_KAFKA_LISTENER
               value: "PLAINTEXT://0.0.0.0:9092"
