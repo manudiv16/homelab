@@ -59,10 +59,8 @@ spec:
         include:
           - /var/log/containers/*.log
         exclude:
-          # Exclude fluentbit's own logs to avoid feedback loops
           - /var/log/containers/fluentbit-*.log
-        # Offset tracking survives collector restarts
-        storage: file_storage
+          - /var/log/containers/collector-daemonset-*.log
         multiline:
           # Combine continuation lines into the preceding log entry.
           # Broad pattern covering Java, Go, Python, Node.js stack traces.
@@ -127,16 +125,10 @@ spec:
             key_value_delimiter: "="
             on_error: send_quiet
 
-    extensions:
-      # Persistent file storage for filelog receiver offsets
-      file_storage:
-        directory: /var/lib/otel
-        create_directory: true
-        timeout: 1s
-        compaction:
-          on_start: true
-          on_rebound: true
-          max_transaction_size: 65536
+    # No extensions needed for MVP.
+    # file_storage extension requires write access that the collector's
+    # non-root user may not have. filelog uses in-memory offset tracking.
+    extensions: {}
 
     processors:
       # ── Existing processors (shared by metrics and logs) ──
@@ -232,8 +224,7 @@ spec:
           num_consumers: 4
 
     service:
-      extensions:
-        - file_storage
+      extensions: []
       pipelines:
         # Existing metrics pipeline (unchanged)
         metrics:
