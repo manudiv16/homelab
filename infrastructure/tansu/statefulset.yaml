@@ -18,70 +18,42 @@ spec:
         app.kubernetes.io/name: tansu
     spec:
       serviceAccountName: tansu-broker
+      volumes:
+        - name: schema
+          configMap:
+            name: tansu-schemas
+            optional: true
       containers:
-        - name: tansu
-          # Pre-built image with all features (Iceberg, Delta, PostgreSQL, S3, etc.)
-          # Published by the Tansu project: https://github.com/tansu-io/tansu/pkgs/container/tansu
+        # ── Container 1: Tansu Kafka broker ──
+        - name: broker
           image: ghcr.io/tansu-io/tansu:0.2.2
           args:
-            - "--all-features"
-          env:
-            # ── Storage backend: SQLite (simple, no external DB needed) ──
-            # Migrate to PostgreSQL for production: set TANSU_STORAGE_ENGINE=postgres
-            # and provide DSN via tansu-secrets.postgres-dsn
-            - name: TANSU_STORAGE_ENGINE
-              value: "sqlite:///var/lib/tansu/tansu.db"
-            - name: TANSU_STORAGE_POSTGRES_DSN
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: postgres-dsn
-                optional: true
-            # ── Kafka-compatible broker ──
-            - name: TANSU_KAFKA_LISTENER
-              value: "PLAINTEXT://0.0.0.0:9092"
-            - name: TANSU_KAFKA_ADVERTISED_LISTENER
-              value: "PLAINTEXT://tansu-broker.monitoring.svc.cluster.local:9092"
-            # ── OTLP ingestion ──
-            - name: TANSU_OTLP_LISTENER
-              value: "0.0.0.0:4317"
-            # ── Prometheus metrics ──
-            - name: TANSU_PROMETHEUS_LISTENER
-              value: "0.0.0.0:9100"
-            # ── Iceberg configuration ──
-            # Mismo bucket Scaleway S3 que FluentBit, carpeta /iceberg/
-            - name: TANSU_ICEBERG_CATALOG_TYPE
-              value: "rest"
-            - name: TANSU_ICEBERG_CATALOG_URI
-              value: "http://localhost:8181"
-            - name: TANSU_ICEBERG_WAREHOUSE
-              value: "s3://local-logs/iceberg"
-            - name: TANSU_ICEBERG_NAMESPACE
-              value: "logs"
-            - name: TANSU_ICEBERG_S3_ENDPOINT
-              value: "https://s3.fr-par.scw.cloud"
-            - name: TANSU_ICEBERG_S3_REGION
-              value: "fr-par"
-            - name: TANSU_ICEBERG_S3_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: s3-access-key
-            - name: TANSU_ICEBERG_S3_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: s3-secret-key
+            - broker
+            - --kafka-cluster-id=homelab
+            - --kafka-listener-url=tcp://0.0.0.0:9092
+            - --kafka-advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
+            - --storage-engine=sqlite:///var/lib/tansu/tansu.db
+            - --schema-registry=file:///etc/tansu/schema
           ports:
-            - name: otlp-grpc
-              containerPort: 4317
-              protocol: TCP
             - name: kafka
               containerPort: 9092
               protocol: TCP
             - name: metrics
               containerPort: 9100
               protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: "warn,tansu_broker=info"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-secret-key
           resources:
             requests:
               cpu: 100m
@@ -102,6 +74,51 @@ spec:
           volumeMounts:
             - name: tansu-data
               mountPath: /var/lib/tansu
+            - name: schema
+              mountPath: /etc/tansu/schema
+              readOnly: true
+
+        # ── Container 2: Tansu Iceberg writer (sidecar) ──
+        # Reads from the local broker and writes schema-backed topics to Iceberg.
+        # For MVP without an Iceberg catalog service, use Parquet output instead:
+        #   tansu broker parquet --location s3://local-logs/parquet-logs/
+        - name: iceberg
+          image: ghcr.io/tansu-io/tansu:0.2.2
+          args:
+            - broker
+            - iceberg
+            - --location=s3://local-logs/iceberg
+            - --catalog=http://localhost:8181/catalog
+            - --namespace=logs
+            - --warehouse=s3://local-logs/iceberg
+          env:
+            - name: RUST_LOG
+              value: "warn,tansu_broker=info"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-secret-key
+            - name: AWS_ENDPOINT
+              value: "https://s3.fr-par.scw.cloud"
+            - name: AWS_DEFAULT_REGION
+              value: "fr-par"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: tansu-data
+              mountPath: /var/lib/tansu
+
   volumeClaimTemplates:
     - metadata:
         name: tansu-data

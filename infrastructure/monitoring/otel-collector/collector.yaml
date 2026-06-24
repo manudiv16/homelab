@@ -325,11 +325,15 @@ spec:
         tls:
           insecure: true
 
-      # ── New exporter: logs → Tansu ──
-      otlp/tansu:
-        endpoint: tansu-broker.monitoring.svc.cluster.local:4317
-        tls:
-          insecure: true
+      # ── New exporter: logs → Tansu (via Kafka) ──
+      # Tansu es un broker Kafka-compatible, no recibe OTLP directo.
+      # El kafkaexporter escribe al topic 'otel-logs' en Tansu.
+      kafka/tansu:
+        brokers:
+          - tansu-broker:9092
+        topic: otel-logs
+        encoding: otlp_proto
+        protocol_version: 2.0.0
         retry_on_failure:
           enabled: true
           initial_interval: 5s
@@ -367,7 +371,7 @@ spec:
             - transform/normalize-logs
             - batch/logs
           exporters:
-            - otlp/tansu
+            - kafka/tansu
       telemetry:
         metrics:
           address: 0.0.0.0:8888
