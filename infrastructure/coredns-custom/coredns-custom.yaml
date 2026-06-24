@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  # Imported into the main .:53 server block by k3s' CoreDNS via:
+  #   import /etc/coredns/custom/*.override
+  #
+  # Problem: the cluster has no IPv6 routing, but Scaleway publishes AAAA
+  # records for its S3 endpoints. Rust HTTP clients (hyper/reqwest used by
+  # Tansu) prefer IPv6 and hang on the unreachable AAAA addresses.
+  #
+  # Solution: return NOERROR (empty answer) for AAAA queries on scw.cloud,
+  # forcing clients to use the IPv4 A records.
+  scaleway.override: |
+    template IN AAAA scw.cloud {
+        rcode NOERROR
+    }

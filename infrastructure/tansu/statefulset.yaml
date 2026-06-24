@@ -18,6 +18,10 @@ spec:
         app.kubernetes.io/name: tansu
     spec:
       serviceAccountName: tansu-broker
+      # IPv6 fix: CoreDNS-custom (kube-system/coredns-custom) bloquea AAAA records
+      # para scw.cloud, forzando todos los pods a usar IPv4 (el cluster no tiene
+      # IPv6 routing). El cliente Rust object_store (reqwest/hyper) preferiría
+      # IPv6 y quedaría bloqueado en timeout.
       containers:
         - name: tansu
           image: ghcr.io/tansu-io/tansu:0.6.0
@@ -25,7 +29,7 @@ spec:
             - --cluster-id=homelab
             - --listener-url=tcp://0.0.0.0:9092
             - --advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
-            - --storage-engine=memory://tansu/
+            - --storage-engine=s3://local-logs/tansu/
           ports:
             - name: kafka
               containerPort: 9092
@@ -50,6 +54,8 @@ spec:
               value: "https://s3.fr-par.scw.cloud"
             - name: AWS_DEFAULT_REGION
               value: "fr-par"
+            - name: AWS_ALLOW_HTTP
+              value: "false"
           resources:
             requests:
               cpu: 100m
@@ -67,4 +73,3 @@ spec:
               port: 9092
             initialDelaySeconds: 30
             periodSeconds: 30
-
