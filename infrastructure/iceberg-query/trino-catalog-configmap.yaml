@@ -4,14 +4,12 @@ metadata:
   name: trino-catalog-config
   namespace: monitoring
 data:
-  # ── Trino base config ──
   config.properties: |
     coordinator=true
     node-scheduler.include-coordinator=true
     http-server.http.port=8080
     query.max-memory=512MB
     query.max-memory-per-node=256MB
-    
     discovery.uri=http://localhost:8080
 
   jvm.config: |
@@ -29,25 +27,19 @@ data:
     node.data-dir=/var/trino/data
     node.id=trino-homelab-001
 
-  # ── Iceberg catalog ──
-  # Mounted at /etc/trino/catalog/iceberg.properties via subPath in the deployment
+  # Iceberg catalog via Lakekeeper REST catalog
+  # Property names for Trino 468: iceberg.rest-catalog.uri (not iceberg.rest.uri)
   iceberg.properties: |
     connector.name=iceberg
     iceberg.catalog.type=rest
-    iceberg.rest.uri=http://lakekeeper.monitoring.svc.cluster.local:8181/catalog
-    # Fallback: Hadoop catalog with direct S3 access if REST catalog is unavailable
-    # connector.name=iceberg
-    # iceberg.catalog.type=hadoop
-    # iceberg.warehouse=s3://logs/iceberg
+    iceberg.rest-catalog.uri=http://lakekeeper.monitoring.svc.cluster.local:8181/catalog
+    fs.native-s3.enabled=true
     s3.endpoint=https://s3.fr-par.scw.cloud
     s3.region=fr-par
-    s3.access-key=${env:AWS_ACCESS_KEY_ID}
-    s3.secret-key=${env:AWS_SECRET_ACCESS_KEY}
+    s3.aws-access-key=${ENV:AWS_ACCESS_KEY_ID}
+    s3.aws-secret-key=${ENV:AWS_SECRET_ACCESS_KEY}
     s3.path-style-access=true
-    iceberg.table-statistics-enabled=false
 
-  # ── Memory catalog for testing ──
-  # Mounted at /etc/trino/catalog/memory.properties via subPath in the deployment
   memory.properties: |
     connector.name=memory
     memory.max-data-per-node=128MB
