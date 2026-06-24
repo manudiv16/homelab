@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tansu-broker
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: tansu
+    app.kubernetes.io/component: broker
+spec:
+  serviceName: tansu-broker
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tansu
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tansu
+    spec:
+      serviceAccountName: tansu-broker
+      containers:
+        - name: tansu
+          # Pre-built image with all features (Iceberg, Delta, PostgreSQL, S3, etc.)
+          # Published by the Tansu project: https://github.com/tansu-io/tansu/pkgs/container/tansu
+          image: ghcr.io/tansu-io/tansu:0.2.2
+          args:
+            - "--all-features"
+          env:
+            # ── Storage backend: PostgreSQL ──
+            - name: TANSU_STORAGE_ENGINE
+              value: "postgres"
+            - name: TANSU_STORAGE_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: postgres-dsn
+            # ── Kafka-compatible broker ──
+            - name: TANSU_KAFKA_LISTENER
+              value: "PLAINTEXT://0.0.0.0:9092"
+            - name: TANSU_KAFKA_ADVERTISED_LISTENER
+              value: "PLAINTEXT://tansu-broker.monitoring.svc.cluster.local:9092"
+            # ── OTLP ingestion ──
+            - name: TANSU_OTLP_LISTENER
+              value: "0.0.0.0:4317"
+            # ── Prometheus metrics ──
+            - name: TANSU_PROMETHEUS_LISTENER
+              value: "0.0.0.0:9100"
+            # ── Iceberg configuration ──
+            # Mismo bucket Scaleway S3 que FluentBit, carpeta /iceberg/
+            - name: TANSU_ICEBERG_CATALOG_TYPE
+              value: "rest"
+            - name: TANSU_ICEBERG_CATALOG_URI
+              value: "http://localhost:8181"
+            - name: TANSU_ICEBERG_WAREHOUSE
+              value: "s3://local-logs/iceberg"
+            - name: TANSU_ICEBERG_NAMESPACE
+              value: "logs"
+            - name: TANSU_ICEBERG_S3_ENDPOINT
+              value: "https://s3.fr-par.scw.cloud"
+            - name: TANSU_ICEBERG_S3_REGION
+              value: "fr-par"
+            - name: TANSU_ICEBERG_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-access-key
+            - name: TANSU_ICEBERG_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-secret-key
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: kafka
+              containerPort: 9092
+              protocol: TCP
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: tansu-data
+              mountPath: /var/lib/tansu
+  volumeClaimTemplates:
+    - metadata:
+        name: tansu-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

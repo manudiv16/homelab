@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: trino
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trino
+    spec:
+      containers:
+        - name: trino
+          image: trinodb/trino:468
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-access-key
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-secret-key
+                  optional: true
+          volumeMounts:
+            - name: catalog-config
+              mountPath: /etc/trino/catalog
+            - name: config
+              mountPath: /etc/trino/config.properties
+              subPath: config.properties
+            - name: config
+              mountPath: /etc/trino/jvm.config
+              subPath: jvm.config
+            - name: config
+              mountPath: /etc/trino/node.properties
+              subPath: node.properties
+          readinessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: catalog-config
+          configMap:
+            name: trino-catalog-config
+            items:
+              - key: iceberg.properties
+                path: iceberg.properties
+              - key: memory.properties
+                path: memory.properties
+        - name: config
+          configMap:
+            name: trino-catalog-config

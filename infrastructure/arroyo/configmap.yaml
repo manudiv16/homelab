@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arroyo-config
+  namespace: monitoring
+data:
+  # ── Arroyo pipeline configuration ──
+  # Arroyo consumes from Tansu (Kafka-compatible) and applies
+  # second-pass normalization for multiline stack trace reassembly.
+
+  pipeline.sql: |
+    -- ============================================================
+    -- Arroyo Streaming SQL — Log Normalization (Second Pass)
+    --
+    -- This pipeline reads normalized logs from Tansu (Kafka topic)
+    -- and applies:
+    --   1. Multiline stack trace reassembly within time windows
+    --   2. Cross-log correlation heuristics
+    --   3. Enrichment from metadata lookups (future)
+    --
+    -- The first pass (OTel Collector transform processor) handles
+    -- ~80% of logs. This second pass catches edge cases that
+    -- require temporal correlation.
+    --
+    -- NOTE: This is a scaffold. Arroyo SQL syntax may differ
+    -- based on the version used. Adjust after deployment.
+    -- ============================================================
+
+    -- Source: Raw logs from Tansu Kafka topic
+    CREATE TABLE otel_logs_source (
+        timestamp          TIMESTAMP(9),
+        observed_timestamp TIMESTAMP(9),
+        severity_number    INT,
+        severity_text      VARCHAR,
+        body               VARCHAR,
+        trace_id           VARCHAR,
+        span_id            VARCHAR,
+        k8s_namespace      VARCHAR,
+        k8s_pod            VARCHAR,
+        k8s_container      VARCHAR,
+        k8s_node           VARCHAR,
+        k8s_deployment     VARCHAR,
+        service_name       VARCHAR,
+        cluster_name       VARCHAR,
+        log_format         VARCHAR,
+        attributes         MAP<VARCHAR, VARCHAR>
+    ) WITH (
+        connector = 'kafka',
+        bootstrap_servers = 'tansu-broker.monitoring.svc.cluster.local:9092',
+        topic = 'otel-logs',
+        format = 'json',
+        'scan.startup.mode' = 'latest-offset'
+    );
+
+    -- Reassemble split stack traces within a 10-second window
+    -- grouped by (namespace, pod, container)
+    CREATE TABLE normalized_logs AS
+    SELECT
+        window_start AS timestamp,
+        k8s_namespace,
+        k8s_pod,
+        k8s_container,
+        k8s_node,
+        k8s_deployment,
+        service_name,
+        log_format,
+        -- Use the highest severity in the window as the record severity
+        CASE
+            WHEN max(severity_number) >= 17 THEN 'ERROR'
+            WHEN max(severity_number) >= 13 THEN 'WARN'
+            ELSE 'INFO'
+        END AS severity_text,
+        max(severity_number) AS severity_number,
+        -- Concatenate body lines with newline for multiline reassembly
+        list_agg(body, '\n') WITHIN GROUP (ORDER BY timestamp) AS body,
+        -- Tag records that were reassembled from multiple log lines
+        CASE
+            WHEN count(*) > 1 THEN 'reassembled'
+            ELSE 'original'
+        END AS processing_state
+    FROM otel_logs_source
+    GROUP BY
+        k8s_namespace,
+        k8s_pod,
+        k8s_container,
+        k8s_node,
+        k8s_deployment,
+        service_name,
+        log_format,
+        -- Tumbling window: group logs within 10-second windows
+        HOP(INTERVAL '10' SECOND, INTERVAL '10' SECOND);
+
+    -- Write normalized results to Iceberg
+    CREATE TABLE normalized_logs_sink
+    WITH (
+        connector = 'iceberg',
+        catalog_uri = 'http://tansu-broker.monitoring.svc.cluster.local:8181',
+        warehouse = 's3://logs/iceberg',
+        namespace = 'logs',
+        table_name = 'otel_logs_normalized'
+    ) AS SELECT * FROM normalized_logs;

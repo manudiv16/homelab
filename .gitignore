@@ -34,6 +34,9 @@ Thumbs.db
 infrastructure/monitoring/fluentbit/secret.yaml
 infrastructure/monitoring/parquet-compactor/secret.yaml
 
+# Tansu secrets — never commit S3 credentials or DSN
+infrastructure/tansu/secret.yaml
+
 # IDE
 .idea/
 .vscode/settings.json

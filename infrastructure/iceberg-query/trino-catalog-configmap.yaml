@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalog-config
+  namespace: monitoring
+data:
+  # ── Trino base config ──
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=true
+    http-server.http.port=8080
+    query.max-memory=512MB
+    query.max-memory-per-node=256MB
+    query.max-total-memory-per-node=512MB
+    discovery-server.enabled=true
+    discovery.uri=http://localhost:8080
+
+  jvm.config: |
+    -server
+    -Xmx2G
+    -XX:+UseG1GC
+    -XX:G1HeapRegionSize=32M
+    -XX:+UseGCOverheadLimit
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:+ExitOnOutOfMemoryError
+
+  node.properties: |
+    node.environment=production
+    node.data-dir=/var/trino/data
+    node.id=trino-homelab-001
+
+  # ── Iceberg catalog ──
+  # Mounted at /etc/trino/catalog/iceberg.properties via subPath in the deployment
+  iceberg.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest.uri=http://tansu-broker.monitoring.svc.cluster.local:8181
+    # Fallback: Hadoop catalog with direct S3 access if REST catalog is unavailable
+    # connector.name=iceberg
+    # iceberg.catalog.type=hadoop
+    # iceberg.warehouse=s3://logs/iceberg
+    s3.endpoint=https://s3.fr-par.scw.cloud
+    s3.region=fr-par
+    s3.access-key=${env:AWS_ACCESS_KEY_ID}
+    s3.secret-key=${env:AWS_SECRET_ACCESS_KEY}
+    s3.path-style-access=true
+    iceberg.table-statistics-enabled=false
+
+  # ── Memory catalog for testing ──
+  # Mounted at /etc/trino/catalog/memory.properties via subPath in the deployment
+  memory.properties: |
+    connector.name=memory
+    memory.max-data-per-node=128MB

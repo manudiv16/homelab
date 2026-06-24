@@ -1,0 +1,406 @@
+# Log Normalization — Task Breakdown
+# Change ID: log-normalization
+# Generated: 2026-06-24
+
+change_id: log-normalization
+status: tasks
+
+forecast:
+  estimated_changed_lines: "650-850"
+  budget_risk: high
+  chained_prs_recommended: true
+  delivery_strategy: ask-on-risk
+  chain_strategy: stacked-to-main
+  decision_needed_before_apply: true
+  pr_split:
+    - id: PR1
+      title: "Tansu infrastructure (PostgreSQL + Broker)"
+      scope: Phase 1 (T1.1-T1.6)
+      estimated_lines: ~250
+      depends_on: []
+    - id: PR2
+      title: "OTel Collector logs pipeline"
+      scope: "Phase 2 (T2.1-T2.6)"
+      estimated_lines: ~300
+      depends_on: [PR1]
+    - id: PR3
+      title: "Query layer (Trino + Arroyo)"
+      scope: "Phase 3 (T3.1-T3.8)"
+      estimated_lines: ~250
+      depends_on: [PR1]
+
+phases:
+  - id: phase-1
+    name: "Tansu Infrastructure (DB + Broker)"
+    pr: PR1
+    tasks:
+      - id: T1.1
+        title: "Create Tansu PostgreSQL StatefulSet and Service"
+        description: >
+          Dedicated PostgreSQL 16-alpine instance for Tansu internal state.
+          StatefulSet with 2Gi PVC, readiness via pg_isready.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/tansu/postgres-statefulset.yaml
+            action: create
+          - path: infrastructure/tansu/postgres-service.yaml
+            action: create
+        dependencies: []
+        verification: >
+          kubectl -n monitoring get pods -l app.kubernetes.io/name=tansu-pg → Running;
+          pg_isready probe passes
+
+      - id: T1.2
+        title: "Create Tansu Secret"
+        description: >
+          Opaque Secret with postgres-dsn, s3-access-key, s3-secret-key.
+          Commit template with placeholders; real values set via kubectl or external-secrets.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/tansu/secret.yaml
+            action: create
+        dependencies: []
+        verification: "kubectl -n monitoring get secret tansu-secrets exists (after credential injection)"
+
+      - id: T1.3
+        title: "Create Tansu Broker StatefulSet"
+        description: >
+          Tansu Kafka-compatible broker StatefulSet with OTLP ingestion and native
+          Iceberg writes. Image: ghcr.io/rustyconover/tansu:latest.
+          PostgreSQL backend, S3 warehouse at s3://logs/iceberg.
+          5Gi PVC, resources 100m/256Mi request 500m/512Mi limit.
+        effort: M
+        type: git-managed
+        files:
+          - path: infrastructure/tansu/statefulset.yaml
+            action: create
+        dependencies: [T1.1, T1.2]
+        verification: >
+          Pod running; ports 4317 and 9092 accepting TCP connections
+
+      - id: T1.4
+        title: "Create Tansu Service"
+        description: >
+          ClusterIP Service exposing Tansu on ports 4317 (OTLP gRPC) and 9092 (Kafka).
+          Name must be tansu-broker to match OTel Collector exporter endpoint.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/tansu/service.yaml
+            action: create
+        dependencies: [T1.3]
+        verification: "kubectl -n monitoring get svc tansu-broker shows both ports"
+
+      - id: T1.5
+        title: "Create Tansu RBAC"
+        description: >
+          ServiceAccount tansu-broker. Add RBAC only if Tansu needs K8s API access
+          for CRD-based Iceberg catalog.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/tansu/rbac.yaml
+            action: create
+        dependencies: []
+        verification: "kubectl -n monitoring get sa tansu-broker"
+
+      - id: T1.6
+        title: "Create ArgoCD Application for Tansu"
+        description: >
+          ArgoCD Application pointing to infrastructure/tansu with sync-wave 3,
+          automated sync (prune + selfHeal), CreateNamespace=true.
+        effort: S
+        type: git-managed
+        files:
+          - path: apps/tansu.yaml
+            action: create
+        dependencies: [T1.1, T1.2, T1.3, T1.4, T1.5]
+        verification: "argocd app get tansu → Synced + Healthy"
+
+  - id: phase-2
+    name: "OTel Collector Logs Pipeline"
+    pr: PR2
+    tasks:
+      - id: T2.1
+        title: "Add volumes, volumeMounts, and file_storage extension"
+        description: >
+          Extend collector.yaml with hostPath volumes for /var/log,
+          /var/lib/docker/containers, and /var/lib/otel/registry (offset tracking).
+          Add file_storage extension with compaction settings.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/monitoring/otel-collector/collector.yaml
+            action: modify
+        dependencies: []
+        verification: "kubectl -n monitoring get ds collector-daemonset -o yaml shows volumes"
+
+      - id: T2.2
+        title: "Add filelog receiver with container parser and conditional operators"
+        description: >
+          Add filelog receiver to collector.yaml. Includes: CRI container parser,
+          conditional json_parser (body starts with {), conditional regex_parser
+          (glog pattern), conditional key_value_parser (>=3 pairs).
+          Multiline: line_start_pattern for Java/Python/Go/Node.js, flush_after 5s.
+          Exclude fluentbit pods.
+        effort: M
+        type: git-managed
+        files:
+          - path: infrastructure/monitoring/otel-collector/collector.yaml
+            action: modify
+        dependencies: [T2.1]
+        verification: "Collector pod logs show filelog receiver started; no parse errors"
+
+      - id: T2.3
+        title: "Add transform/normalize-logs processor"
+        description: >
+          Add transform processor with ~60 OTTL statements across 5 groups:
+          format detection (json/glog/keyvalue/text), severity normalization
+          (level/severity fields, case-insensitive), timestamp extraction
+          (multiple JSON field names, glog format), body cleanup
+          (msg/message to body), attribute cleanup (remove parser artifacts).
+        effort: L
+        type: git-managed
+        files:
+          - path: infrastructure/monitoring/otel-collector/collector.yaml
+            action: modify
+        dependencies: [T2.2]
+        verification: "Deploy test JSON log; query for correct log.format and severity"
+
+      - id: T2.4
+        title: "Add batch/logs processor and otlp/tansu exporter"
+        description: >
+          Dedicated batch processor (5s timeout, 512 batch size, 1024 max).
+          OTLP exporter to tansu-broker:4317 with retry_on_failure
+          (initial 5s, max 30s, elapsed 300s) and sending_queue (5000, 4 consumers).
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/monitoring/otel-collector/collector.yaml
+            action: modify
+        dependencies: []
+        verification: "Collector config validates; exporter endpoint resolves via DNS"
+
+      - id: T2.5
+        title: "Add logs pipeline to service.pipelines"
+        description: >
+          Wire the logs pipeline: receivers [filelog], processors
+          [memory_limiter, k8sattributes, transform/normalize-logs, resource/cluster, batch/logs],
+          exporters [otlp/tansu].
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/monitoring/otel-collector/collector.yaml
+            action: modify
+        dependencies: [T2.2, T2.3, T2.4]
+        verification: "Collector startup logs show both metrics and logs pipelines active"
+
+      - id: T2.6
+        title: "Increase resource limits and memory_limiter"
+        description: >
+          CPU request 100m→150m, add CPU limit 500m. Memory request 128Mi→200Mi,
+          limit 512Mi→600Mi. memory_limiter limit_mib 400→500, spike_limit_mib 100→150.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/monitoring/otel-collector/collector.yaml
+            action: modify
+        dependencies: []
+        verification: "No OOMKills in first 30 minutes under production log volume"
+
+  - id: phase-3
+    name: "Iceberg + Query Layer"
+    pr: PR3
+    tasks:
+      - id: T3.1
+        title: "Create Trino Deployment"
+        description: >
+          Single-replica Trino coordinator (trinodb/trino:468) in monitoring namespace.
+          Catalog config from ConfigMap mounted at /etc/trino/catalog.
+          Resources: 250m/512Mi request, 1000m/1Gi limit.
+          Readiness/liveness on /v1/info port 8080.
+        effort: M
+        type: git-managed
+        files:
+          - path: infrastructure/iceberg-query/trino-deployment.yaml
+            action: create
+        dependencies: []
+        verification: "Pod running; GET /v1/info returns healthy"
+
+      - id: T3.2
+        title: "Create Trino Service"
+        description: "ClusterIP Service for Trino on port 8080."
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/iceberg-query/trino-service.yaml
+            action: create
+        dependencies: [T3.1]
+        verification: "kubectl -n monitoring get svc trino → port 8080"
+
+      - id: T3.3
+        title: "Create Trino Iceberg catalog ConfigMap"
+        description: >
+          Trino Iceberg connector config. Start with Hadoop catalog pointing to
+          s3://logs/iceberg on Scaleway S3. S3 credentials from env vars or Secret.
+          iceberg.table-statistics-enabled=false.
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/iceberg-query/trino-catalog-configmap.yaml
+            action: create
+        dependencies: []
+        verification: "SHOW CATALOGS in Trino includes iceberg"
+
+      - id: T3.4
+        title: "Create ArgoCD Application for Iceberg Query"
+        description: >
+          ArgoCD Application pointing to infrastructure/iceberg-query,
+          sync-wave 4, automated sync.
+        effort: S
+        type: git-managed
+        files:
+          - path: apps/iceberg-query.yaml
+            action: create
+        dependencies: [T3.1, T3.2, T3.3]
+        verification: "argocd app get iceberg-query → Synced + Healthy"
+
+      - id: T3.5
+        title: "Create Arroyo Deployment"
+        description: >
+          Arroyo deployment for streaming SQL second-pass normalization.
+          Image: ghcr.io/arroyosystems/arroyo:latest.
+          Connects to Tansu Kafka endpoint and Iceberg catalog.
+          Resources: 100m/256Mi request, 500m/512Mi limit.
+        effort: M
+        type: git-managed
+        files:
+          - path: infrastructure/arroyo/deployment.yaml
+            action: create
+        dependencies: []
+        verification: "Pod running; Arroyo API accessible on port 8000"
+
+      - id: T3.6
+        title: "Create Arroyo Service"
+        description: "ClusterIP Service for Arroyo on port 8000."
+        effort: S
+        type: git-managed
+        files:
+          - path: infrastructure/arroyo/service.yaml
+            action: create
+        dependencies: [T3.5]
+        verification: "kubectl -n monitoring get svc arroyo → port 8000"
+
+      - id: T3.7
+        title: "Create Arroyo streaming SQL ConfigMap"
+        description: >
+          ConfigMap with SQL definitions for: otel_logs_source (Kafka source),
+          normalized_logs (tumbling window reassembly, 10s window),
+          normalized_logs_sink (Iceberg output to otel_logs_normalized).
+        effort: M
+        type: git-managed
+        files:
+          - path: infrastructure/arroyo/configmap.yaml
+            action: create
+        dependencies: []
+        verification: "ConfigMap exists; Arroyo UI shows pipeline definition"
+
+      - id: T3.8
+        title: "Create ArgoCD Application for Arroyo"
+        description: >
+          ArgoCD Application pointing to infrastructure/arroyo,
+          sync-wave 4, automated sync.
+        effort: S
+        type: git-managed
+        files:
+          - path: apps/arroyo.yaml
+            action: create
+        dependencies: [T3.5, T3.6, T3.7]
+        verification: "argocd app get arroyo → Synced + Healthy"
+
+  - id: phase-4
+    name: "Verification & Tuning"
+    tasks:
+      - id: T4.1
+        title: "Validate ArgoCD sync status"
+        description: >
+          Verify tansu, otel-collector, iceberg-query, arroyo all show
+          Synced + Healthy in ArgoCD.
+        effort: S
+        type: manual
+        dependencies: [T1.6, T2.5, T3.4, T3.8]
+        verification: "All four apps Synced + Healthy"
+
+      - id: T4.2
+        title: "Verify collector resource stability"
+        description: >
+          Monitor collector DaemonSet pods for 30 minutes. Check for OOMKills,
+          memory usage < 600Mi, zero restarts.
+        effort: M
+        type: manual
+        dependencies: [T4.1]
+        verification: "Zero OOMKills; memory < 600Mi; zero restarts in 30 min"
+
+      - id: T4.3
+        title: "Verify logs arriving at Tansu"
+        description: >
+          Check Tansu pod logs for OTLP ingestion. Verify
+          otelcol_exporter_sent_log_records > 0 via collector metrics.
+        effort: S
+        type: manual
+        dependencies: [T4.2]
+        verification: "Tansu logs show received records; exporter metric > 0"
+
+      - id: T4.4
+        title: "Validate Iceberg table exists and is queryable"
+        description: >
+          Verify otel_logs Iceberg table created by Tansu. Query via Trino.
+          Expected: table exists, row count > 0.
+        effort: M
+        type: manual
+        dependencies: [T4.3]
+        verification: "SHOW TABLES includes otel_logs; SELECT count(*) > 0"
+
+      - id: T4.5
+        title: "Run mandatory queries Q1-Q5 via Trino"
+        description: >
+          Execute all 5 mandatory queries from spec: ERROR logs by namespace,
+          stack trace search, log volume per namespace/hour, error rate by
+          service, top log-producing pods.
+        effort: M
+        type: manual
+        dependencies: [T4.4]
+        verification: "All queries return non-empty results"
+
+      - id: T4.6
+        title: "Validate DuckDB ad-hoc queries"
+        description: >
+          Run same queries via DuckDB CLI (local or pod exec) with iceberg
+          and httpfs extensions. Results must match Trino.
+        effort: S
+        type: manual
+        dependencies: [T4.4]
+        verification: "DuckDB row counts match Trino results"
+
+      - id: T4.7
+        title: "24-hour parallel validation"
+        description: >
+          Compare Iceberg log count vs FluentBit Parquet count over 24 hours.
+          Delta must be within ±5% (AC-15). Use DuckDB for both queries.
+        effort: L
+        type: manual
+        dependencies: [T4.3]
+        verification: "Log count delta within ±5%"
+
+      - id: T4.8
+        title: "Adjust OTTL rules based on real log patterns"
+        description: >
+          Review real log format distribution. Find misclassified text logs.
+          Add/adjust OTTL where clauses. Tighten or broaden multiline regex.
+          Iterative: each adjustment is a small PR on top of PR2.
+        effort: "M-L"
+        type: git-managed
+        dependencies: [T4.5]
+        verification: "Log format distribution shows < 5% text (unclassified)"
