@@ -18,22 +18,17 @@ spec:
         app.kubernetes.io/name: tansu
     spec:
       serviceAccountName: tansu-broker
-      volumes:
-        - name: schema
-          configMap:
-            name: tansu-schemas
-            optional: true
       containers:
-        # ── Container 1: Tansu Kafka broker ──
-        - name: broker
+        - name: tansu
           image: ghcr.io/tansu-io/tansu:0.2.2
+          # El binary es tansu-server (entrypoint del container).
+          # En esta build NO hay subcomandos (broker/iceberg/cat/etc).
+          # Los args se pasan directamente:
           args:
-            - broker
             - --kafka-cluster-id=homelab
             - --kafka-listener-url=tcp://0.0.0.0:9092
             - --kafka-advertised-listener-url=tcp://tansu-broker.monitoring.svc.cluster.local:9092
-            - --storage-engine=sqlite:///var/lib/tansu/tansu.db
-            - --schema-registry=file:///etc/tansu/schema
+            - --storage-engine=memory://tansu/
           ports:
             - name: kafka
               containerPort: 9092
@@ -71,54 +66,6 @@ spec:
               port: 9092
             initialDelaySeconds: 30
             periodSeconds: 30
-          volumeMounts:
-            - name: tansu-data
-              mountPath: /var/lib/tansu
-            - name: schema
-              mountPath: /etc/tansu/schema
-              readOnly: true
-
-        # ── Container 2: Tansu Iceberg writer (sidecar) ──
-        # Reads from the local broker and writes schema-backed topics to Iceberg.
-        # For MVP without an Iceberg catalog service, use Parquet output instead:
-        #   tansu broker parquet --location s3://local-logs/parquet-logs/
-        - name: iceberg
-          image: ghcr.io/tansu-io/tansu:0.2.2
-          args:
-            - broker
-            - iceberg
-            - --location=s3://local-logs/iceberg
-            - --catalog=http://localhost:8181/catalog
-            - --namespace=logs
-            - --warehouse=s3://local-logs/iceberg
-          env:
-            - name: RUST_LOG
-              value: "warn,tansu_broker=info"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: s3-access-key
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: s3-secret-key
-            - name: AWS_ENDPOINT
-              value: "https://s3.fr-par.scw.cloud"
-            - name: AWS_DEFAULT_REGION
-              value: "fr-par"
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: 200m
-              memory: 256Mi
-          volumeMounts:
-            - name: tansu-data
-              mountPath: /var/lib/tansu
-
   volumeClaimTemplates:
     - metadata:
         name: tansu-data
@@ -126,4 +73,4 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: 5Gi
+            storage: 1Gi
