@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lakekeeper
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: lakekeeper
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: lakekeeper
+  ports:
+    - name: http
+      port: 8181
+      targetPort: 8181

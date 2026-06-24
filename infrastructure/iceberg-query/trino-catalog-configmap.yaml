@@ -35,7 +35,7 @@ data:
   iceberg.properties: |
     connector.name=iceberg
     iceberg.catalog.type=rest
-    iceberg.rest.uri=http://tansu-broker.monitoring.svc.cluster.local:8181
+    iceberg.rest.uri=http://lakekeeper.monitoring.svc.cluster.local:8181/catalog
     # Fallback: Hadoop catalog with direct S3 access if REST catalog is unavailable
     # connector.name=iceberg
     # iceberg.catalog.type=hadoop
