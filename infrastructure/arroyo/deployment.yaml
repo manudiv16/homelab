@@ -29,13 +29,8 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-          env:
-            - name: ARROYO__KAFKA_BOOTSTRAP_SERVERS
-              value: "tansu-broker.monitoring.svc.cluster.local:9092"
-            - name: ARROYO__ICEBERG_CATALOG_URI
-              value: "http://tansu-broker.monitoring.svc.cluster.local:8181"
-            - name: ARROYO__ICEBERG_WAREHOUSE
-              value: "s3://logs/iceberg"
+          # No ARROYO__ env vars — unknown fields crash the process.
+          # Pipeline configuration via the Arroyo API/UI after startup.
           volumeMounts:
             - name: config
               mountPath: /etc/arroyo

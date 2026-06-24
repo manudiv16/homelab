@@ -53,6 +53,8 @@ spec:
             - name: config
               mountPath: /etc/trino/node.properties
               subPath: node.properties
+            - name: trino-data
+              mountPath: /var/trino/data
           readinessProbe:
             httpGet:
               path: /v1/info
@@ -78,3 +80,5 @@ spec:
         - name: config
           configMap:
             name: trino-catalog-config
+        - name: trino-data
+          emptyDir: {}

@@ -75,6 +75,9 @@ spec:
           - type: container
             id: cri-parser
             format: containerd
+            # Pass through logs that don't match CRI format (e.g. MetalLB,
+            # some k3s components). Spec requires ALL logs to flow.
+            on_error: send_quiet
 
           # Step 2: Try JSON parsing (conditional)
           # Only fires if body starts with "{"
