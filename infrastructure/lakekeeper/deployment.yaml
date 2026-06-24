@@ -16,7 +16,6 @@ spec:
       labels:
         app.kubernetes.io/name: lakekeeper
     spec:
-      # Lakekeeper uses the same S3 endpoint → same IPv6 workaround
       hostAliases:
         - ip: "51.159.62.18"
           hostnames: ["s3.fr-par.scw.cloud"]
@@ -26,35 +25,37 @@ spec:
           args: ["migrate"]
           env:
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
-              value: "postgresql://lakekeeper:$(POSTGRES_PASSWORD)@lakekeeper-pg.monitoring.svc.cluster.local:5432/lakekeeper"
-            - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
-              value: "postgresql://lakekeeper:$(POSTGRES_PASSWORD)@lakekeeper-pg.monitoring.svc.cluster.local:5432/lakekeeper"
-            - name: LAKEKEEPER__PG_ENCRYPTION_KEY
-              value: "homelab-iceberg-encryption-key-32b"
-            - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: lakekeeper-secrets
-                  key: postgres-password
+                  key: pg-url
+            - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
+              valueFrom:
+                secretKeyRef:
+                  name: lakekeeper-secrets
+                  key: pg-url
+            - name: LAKEKEEPER__PG_ENCRYPTION_KEY
+              value: "homelab-iceberg-encryption-key-32ch"
       containers:
         - name: lakekeeper
           image: quay.io/lakekeeper/catalog:latest
-          command: ["serve"]
+          args: ["serve"]
           ports:
             - name: http
               containerPort: 8181
           env:
             - name: LAKEKEEPER__PG_DATABASE_URL_READ
-              value: "postgresql://lakekeeper:$(POSTGRES_PASSWORD)@lakekeeper-pg.monitoring.svc.cluster.local:5432/lakekeeper"
-            - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
-              value: "postgresql://lakekeeper:$(POSTGRES_PASSWORD)@lakekeeper-pg.monitoring.svc.cluster.local:5432/lakekeeper"
-            - name: LAKEKEEPER__PG_ENCRYPTION_KEY
-              value: "homelab-iceberg-encryption-key-32b"
-            - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: lakekeeper-secrets
-                  key: postgres-password
+                  key: pg-url
+            - name: LAKEKEEPER__PG_DATABASE_URL_WRITE
+              valueFrom:
+                secretKeyRef:
+                  name: lakekeeper-secrets
+                  key: pg-url
+            - name: LAKEKEEPER__PG_ENCRYPTION_KEY
+              value: "homelab-iceberg-encryption-key-32ch"
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -82,6 +83,6 @@ spec:
             httpGet:
               path: /health
               port: 8181
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 5

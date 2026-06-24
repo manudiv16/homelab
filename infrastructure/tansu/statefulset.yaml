@@ -89,42 +89,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 30
 
-        # ── Sidecar: Tansu Iceberg writer ──
-        # Lee del topic otel-logs en el broker local y escribe tablas Iceberg
-        # en S3 via Lakekeeper REST catalog.
-        # Se inicia despues del broker (mismo pod, localhost:9092).
-        - name: iceberg
-          image: ghcr.io/tansu-io/tansu:0.6.0
-          args:
-            - iceberg
-            - --kafka-brokers=localhost:9092
-            - --location=s3://local-logs/iceberg
-            - --catalog=http://lakekeeper.monitoring.svc.cluster.local:8181/catalog
-            - --namespace=logs
-            - --warehouse=s3://local-logs/iceberg
-          env:
-            - name: RUST_LOG
-              value: "warn"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: s3-access-key
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: tansu-secrets
-                  key: s3-secret-key
-            - name: AWS_ENDPOINT
-              value: "https://s3.fr-par.scw.cloud"
-            - name: AWS_DEFAULT_REGION
-              value: "fr-par"
-            - name: AWS_EC2_METADATA_DISABLED
-              value: "true"
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              cpu: 250m
-              memory: 256Mi
+        # TODO: Sidecar tansu iceberg (Iceberg writer) requires schema
+        # registry to be configured so Tansu can map topic data to Arrow types.
+        # Will be added once a schema is registered for the otel-logs topic.
+        # See: https://docs.tansu.io/docs/iceberg
