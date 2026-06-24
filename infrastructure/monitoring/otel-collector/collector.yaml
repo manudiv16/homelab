@@ -131,6 +131,7 @@ spec:
       # Persistent file storage for filelog receiver offsets
       file_storage:
         directory: /var/lib/otel
+        create_directory: true
         timeout: 1s
         compaction:
           on_start: true
@@ -161,156 +162,42 @@ spec:
             action: upsert
 
       # ── New: transform processor for log normalization ──
+      # Simplified OTTL to avoid syntax issues with opentelemetry-collector-contrib 0.123.0
       transform/normalize-logs:
         log_statements:
-          # ── Group 1: Format detection ──
+          # ── Format detection ──
           - context: log
             statements:
-              # Default: tag as text until proven otherwise
               - set(attributes["log.format"], "text")
+              - set(attributes["log.format"], "json") where IsMatch(body, "^\\{")
+              - set(attributes["log.format"], "keyvalue") where attributes["ts"] != nil
 
-              # JSON detection (json_parser already parsed into attributes)
-              - set(attributes["log.format"], "json")
-                where IsString(body) and body startsWith "{"
-
-              # glog detection (regex_parser already parsed severity_letter)
-              - set(attributes["log.format"], "glog")
-                where IsString(attributes["severity_letter"]) and attributes["severity_letter"] != ""
-
-              # Key=Value detection (kv_parser puts kv keys in attributes)
-              - set(attributes["log.format"], "keyvalue")
-                where attributes["log.format"] == "text" and IsString(attributes["ts"])
-
-          # ── Group 2: Severity normalization ──
+          # ── Severity normalization ──
           - context: log
             statements:
-              # Default severity (for text logs with no detectable level)
-              - set(severity_text, "INFO")
-              - set(severity_number, 9)
+              - set(severity_number, 9) where severity_number == nil
+              - set(severity_text, "INFO") where severity_text == nil
+              - set(severity_number, 5) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)debug")
+              - set(severity_text, "DEBUG") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)debug")
+              - set(severity_number, 13) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)warn")
+              - set(severity_text, "WARN") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)warn")
+              - set(severity_number, 17) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)err")
+              - set(severity_text, "ERROR") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)err")
+              - set(severity_number, 21) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)fatal")
+              - set(severity_text, "FATAL") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)fatal")
 
-              # JSON severity: check common field names
-              - set(severity_text, "TRACE")
-                where IsMatch(attributes["level"], "(?i)trace")
-              - set(severity_number, 1)
-                where IsMatch(attributes["level"], "(?i)trace")
-
-              - set(severity_text, "DEBUG")
-                where IsMatch(attributes["level"], "(?i)debug")
-              - set(severity_number, 5)
-                where IsMatch(attributes["level"], "(?i)debug")
-
-              - set(severity_text, "INFO")
-                where IsMatch(attributes["level"], "(?i)info")
-              - set(severity_number, 9)
-                where IsMatch(attributes["level"], "(?i)info")
-
-              - set(severity_text, "WARN")
-                where IsMatch(attributes["level"], "(?i)(warn|warning)")
-              - set(severity_number, 13)
-                where IsMatch(attributes["level"], "(?i)(warn|warning)")
-
-              - set(severity_text, "ERROR")
-                where IsMatch(attributes["level"], "(?i)(error|err)")
-              - set(severity_number, 17)
-                where IsMatch(attributes["level"], "(?i)(error|err)")
-
-              - set(severity_text, "FATAL")
-                where IsMatch(attributes["level"], "(?i)(fatal|panic|critical)")
-              - set(severity_number, 21)
-                where IsMatch(attributes["level"], "(?i)(fatal|panic|critical)")
-
-              # Also check "severity" field (alternative JSON key)
-              - set(severity_text, "TRACE")
-                where IsMatch(attributes["severity"], "(?i)trace")
-              - set(severity_number, 1)
-                where IsMatch(attributes["severity"], "(?i)trace")
-
-              - set(severity_text, "DEBUG")
-                where IsMatch(attributes["severity"], "(?i)debug")
-              - set(severity_number, 5)
-                where IsMatch(attributes["severity"], "(?i)debug")
-
-              - set(severity_text, "INFO")
-                where IsMatch(attributes["severity"], "(?i)info")
-              - set(severity_number, 9)
-                where IsMatch(attributes["severity"], "(?i)info")
-
-              - set(severity_text, "WARN")
-                where IsMatch(attributes["severity"], "(?i)(warn|warning)")
-              - set(severity_number, 13)
-                where IsMatch(attributes["severity"], "(?i)(warn|warning)")
-
-              - set(severity_text, "ERROR")
-                where IsMatch(attributes["severity"], "(?i)(error|err)")
-              - set(severity_number, 17)
-                where IsMatch(attributes["severity"], "(?i)(error|err)")
-
-              - set(severity_text, "FATAL")
-                where IsMatch(attributes["severity"], "(?i)(fatal|panic|critical)")
-              - set(severity_number, 21)
-                where IsMatch(attributes["severity"], "(?i)(fatal|panic|critical)")
-
-              # glog severity: already handled by regex_parser's severity mapping.
-              # Fallback if regex_parser didn't set it:
-              - set(severity_text, "INFO")
-                where attributes["log.format"] == "glog" and severity_number < 9
-              - set(severity_number, 9)
-                where attributes["log.format"] == "glog" and severity_number < 9
-
-          # ── Group 3: Timestamp normalization ──
+          # ── Body cleanup ──
           - context: log
             statements:
-              # JSON timestamp: try common field names
-              # (json_parser may have already extracted via its timestamp config)
-              - set(time, Time(attributes["timestamp"], "%Y-%m-%dT%H:%M:%S.%LZ"))
-                where attributes["log.format"] == "json" and IsString(attributes["timestamp"])
-              - set(time, Time(attributes["ts"], "%Y-%m-%dT%H:%M:%SZ"))
-                where attributes["log.format"] == "json" and IsString(attributes["ts"])
-              - set(time, Time(attributes["@timestamp"], "%Y-%m-%dT%H:%M:%S.%LZ"))
-                where attributes["log.format"] == "json" and IsString(attributes["@timestamp"])
+              - set(body, attributes["msg"]) where attributes["msg"] != nil
+              - set(body, attributes["message"]) where attributes["message"] != nil and body == nil
 
-              # KV timestamp
-              - set(time, Time(attributes["ts"], "%Y-%m-%dT%H:%M:%SZ"))
-                where attributes["log.format"] == "keyvalue" and IsString(attributes["ts"])
-              - set(time, Time(attributes["time"], "%Y-%m-%dT%H:%M:%SZ"))
-                where attributes["log.format"] == "keyvalue" and IsString(attributes["time"])
-
-              # glog timestamp: already handled by regex_parser's timestamp config.
-              # Falls back to CRI timestamp if regex_parser failed.
-
-              # text: keep CRI timestamp (already set by container operator). No action.
-
-          # ── Group 4: Body cleanup ──
-          - context: log
-            statements:
-              # JSON: move "msg" or "message" to body for cleaner queries
-              - set(body, attributes["msg"])
-                where attributes["log.format"] == "json" and IsString(attributes["msg"])
-              - set(body, attributes["message"])
-                where attributes["log.format"] == "json" and IsString(attributes["message"]) and not IsString(attributes["msg"])
-
-              # glog: message already extracted to attributes["message"] by regex
-              - set(body, attributes["message"])
-                where attributes["log.format"] == "glog" and IsString(attributes["message"])
-
-              # KV: move "msg" to body
-              - set(body, attributes["msg"])
-                where attributes["log.format"] == "keyvalue" and IsString(attributes["msg"])
-              - set(body, attributes["message"])
-                where attributes["log.format"] == "keyvalue" and IsString(attributes["message"]) and not IsString(attributes["msg"])
-
-          # ── Group 5: Attribute cleanup ──
-          # Remove internal parser artifacts from attributes to keep the
-          # attribute map clean for downstream consumers (Tansu/Iceberg).
+          # ── Attribute cleanup ──
           - context: log
             statements:
               - delete_key(attributes, "severity_letter")
-              - delete_key(attributes, "source_file")
-              - delete_key(attributes, "source_line")
-              - delete_key(attributes, "thread_id")
               - delete_key(attributes, "log.iostream")
-              # Keep: log.format, level, msg, message, ts, timestamp,
-              #       and all user-defined JSON/KV fields
+              - delete_key(attributes, "logtag")
 
       # ── New: batch processor specifically for logs ──
       batch/logs:
