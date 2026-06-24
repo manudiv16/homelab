@@ -54,7 +54,7 @@ spec:
               mountPath: /etc/trino/node.properties
               subPath: node.properties
             - name: trino-data
-              mountPath: /var/trino/data
+              mountPath: /var/trino
           readinessProbe:
             httpGet:
               path: /v1/info
