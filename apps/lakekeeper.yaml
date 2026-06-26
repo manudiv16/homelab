@@ -9,16 +9,22 @@ spec:
   project: default
   sources:
     # Source 1: Official Lakekeeper Helm chart
-    - repoURL: oci://ghcr.io/lakekeeper/helm-charts
+    - repoURL: https://lakekeeper.github.io/lakekeeper-charts/
       targetRevision: 0.9.0
       chart: lakekeeper
       helm:
         valueFiles:
           - $values/infrastructure/lakekeeper/values.yaml
-    # Source 2: Our repo with custom values
+    # Source 2: Our repo for Helm values file reference
     - repoURL: https://github.com/manudiv16/homelab.git
       targetRevision: main
       ref: values
+    # Source 3: Our repo for local manifests (secrets)
+    - repoURL: https://github.com/manudiv16/homelab.git
+      targetRevision: main
+      path: infrastructure/lakekeeper
+      directory:
+        exclude: "values.yaml"
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
