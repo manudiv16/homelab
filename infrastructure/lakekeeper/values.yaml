@@ -59,7 +59,9 @@ catalog:
 # Embedded PostgreSQL via groundhog2k/postgres subchart
 postgresql:
   enabled: true
-  nameOverride: "lakekeeper-pg"
+  # fullnameOverride ensures the service is named exactly "lakekeeper-pg"
+  # so the catalog can find it via the parent's fullname helper
+  fullnameOverride: "lakekeeper-pg"
 
   service:
     port: 5432
@@ -78,7 +80,6 @@ postgresql:
       - ReadWriteOnce
 
 # Secret backend — store encrypted secrets in Postgres
-# Required for ArgoCD: explicit secret ref (helm lookup not compatible)
 secretBackend:
   type: "Postgres"
   postgres:
