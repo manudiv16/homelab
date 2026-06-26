@@ -128,6 +128,13 @@ spec:
             key_value_delimiter: "="
             on_error: send_quiet
 
+          - id: raw-fallback
+            type: regex_parser
+            regex: "^(?P<log>.*)$"
+            parse_from: body
+            parse_to: attributes
+            on_error: send_quiet
+
     # No extensions needed for MVP.
     # file_storage extension requires write access that the collector's
     # non-root user may not have. filelog uses in-memory offset tracking.
@@ -193,6 +200,13 @@ spec:
               - delete_key(attributes, "severity_letter")
               - delete_key(attributes, "log.iostream")
               - delete_key(attributes, "logtag")
+
+          - context: log
+            statements:
+              - set(attributes["log.format"], "raw") where attributes["log.format"] == nil
+              - set(severity_number, 9) where severity_number == nil
+              - set(severity_text, "INFO") where severity_text == nil
+              - set(body, attributes["log"]) where attributes["log"] != nil and body == ""
 
       # ── New: batch processor specifically for logs ──
       batch/logs:
