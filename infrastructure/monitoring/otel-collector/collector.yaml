@@ -89,7 +89,10 @@ spec:
               mapping:
                 F: error
             on_error: drop
-            if: 'body matches "^\\d{4}-\\d{2}-\\d{2}T"'
+            # Match the FULL CRI line, not just the timestamp prefix.
+            # Lines like bare timestamps or partial CRI would pass the old
+            # condition and then fail the regex, producing errors.
+            if: 'body matches "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z (stdout|stderr) [FP] "'
 
           # Step 2: Try JSON parsing (conditional)
           # Only fires if body starts with "{"
