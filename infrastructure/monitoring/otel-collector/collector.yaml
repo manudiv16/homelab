@@ -53,6 +53,17 @@ spec:
         auth_type: serviceAccount
         endpoint: ${env:K8S_NODE_NAME}:10250
         insecure_skip_verify: true
+        metrics:
+          # Disable deprecated cpu.utilization metrics — replaced by cpu.usage.
+          container.cpu.utilization:
+            enabled: false
+          k8s.node.cpu.utilization:
+            enabled: false
+          k8s.pod.cpu.utilization:
+            enabled: false
+          # Enable the new cpu.usage metric.
+          container.cpu.usage:
+            enabled: true
 
       # ── New: filelog receiver for container logs ──
       filelog:
@@ -189,43 +200,43 @@ spec:
           # ── Format detection ──
           - context: log
             statements:
-              - set(attributes["log.format"], "text")
-              - set(attributes["log.format"], "json") where IsMatch(body, "^\\{")
-              - set(attributes["log.format"], "keyvalue") where attributes["ts"] != nil
+              - set(log.attributes["log.format"], "text")
+              - set(log.attributes["log.format"], "json") where IsMatch(log.body, "^\\{")
+              - set(log.attributes["log.format"], "keyvalue") where log.attributes["ts"] != nil
 
           # ── Severity normalization ──
           - context: log
             statements:
-              - set(severity_number, 9) where severity_number == nil
-              - set(severity_text, "INFO") where severity_text == nil
-              - set(severity_number, 5) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)debug")
-              - set(severity_text, "DEBUG") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)debug")
-              - set(severity_number, 13) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)warn")
-              - set(severity_text, "WARN") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)warn")
-              - set(severity_number, 17) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)err")
-              - set(severity_text, "ERROR") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)err")
-              - set(severity_number, 21) where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)fatal")
-              - set(severity_text, "FATAL") where attributes["level"] != nil and IsMatch(attributes["level"], "(?i)fatal")
+              - set(log.severity_number, 9) where log.severity_number == nil
+              - set(log.severity_text, "INFO") where log.severity_text == nil
+              - set(log.severity_number, 5) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)debug")
+              - set(log.severity_text, "DEBUG") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)debug")
+              - set(log.severity_number, 13) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)warn")
+              - set(log.severity_text, "WARN") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)warn")
+              - set(log.severity_number, 17) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)err")
+              - set(log.severity_text, "ERROR") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)err")
+              - set(log.severity_number, 21) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)fatal")
+              - set(log.severity_text, "FATAL") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)fatal")
 
           # ── Body cleanup ──
           - context: log
             statements:
-              - set(body, attributes["msg"]) where attributes["msg"] != nil
-              - set(body, attributes["message"]) where attributes["message"] != nil and body == nil
+              - set(log.body, log.attributes["msg"]) where log.attributes["msg"] != nil
+              - set(log.body, log.attributes["message"]) where log.attributes["message"] != nil and log.body == nil
 
           # ── Attribute cleanup ──
           - context: log
             statements:
-              - delete_key(attributes, "severity_letter")
-              - delete_key(attributes, "log.iostream")
-              - delete_key(attributes, "logtag")
+              - delete_key(log.attributes, "severity_letter")
+              - delete_key(log.attributes, "log.iostream")
+              - delete_key(log.attributes, "logtag")
 
           - context: log
             statements:
-              - set(attributes["log.format"], "raw") where attributes["log.format"] == nil
-              - set(severity_number, 9) where severity_number == nil
-              - set(severity_text, "INFO") where severity_text == nil
-              - set(body, attributes["log"]) where attributes["log"] != nil and body == ""
+              - set(log.attributes["log.format"], "raw") where log.attributes["log.format"] == nil
+              - set(log.severity_number, 9) where log.severity_number == nil
+              - set(log.severity_text, "INFO") where log.severity_text == nil
+              - set(log.body, log.attributes["log"]) where log.attributes["log"] != nil and log.body == ""
 
       # ── New: batch processor specifically for logs ──
       batch/logs:
