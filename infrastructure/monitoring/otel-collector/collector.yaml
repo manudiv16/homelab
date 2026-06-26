@@ -61,29 +61,41 @@ spec:
         exclude:
           - /var/log/containers/fluentbit-*.log
           - /var/log/containers/collector-daemonset-*.log
-        multiline:
-          # Combine continuation lines into the preceding log entry.
-          # Broad pattern covering Java, Go, Python, Node.js stack traces.
-          # OTel filelog receiver no soporta flush_after timeout.
-          line_start_pattern: '^(\d{4}-\d{2}-\d{2}|[IWEF]\d{4}|Traceback|panic|goroutine \d+)'
+        # NOTE: multiline disabled — when combined with the container operator,
+        # continuation lines break the CRI format regex, causing parse errors.
+        # The container operator bug (GH#41508) ignores on_error for unrecognized
+        # formats, so multiline + container = spam. Multiline will be handled
+        # downstream by a recombine processor in the pipeline.
+        # multiline:
+        #   line_start_pattern: '^(\d{4}-\d{2}-\d{2}|[IWEF]\d{4}|Traceback|panic|goroutine \d+)'
         operators:
-          # Step 1: Parse CRI log format
+          # Step 1: Parse CRI log format with regex (container operator ignores
+          # on_error for unrecognized formats — GH issue #41508).
           # Input:  "2026-06-24T10:15:30.123456789Z stdout F {\"level\":\"info\"}"
           # Output: body = "{\"level\":\"info\"}"
           #         attributes["log.iostream"] = "stdout"
           #         time = 2026-06-24T10:15:30.123456789Z
-          - type: container
+          - type: regex_parser
             id: cri-parser
-            format: containerd
-            # Pass through logs that don't match CRI format (e.g. MetalLB,
-            # some k3s components). Spec requires ALL logs to flow.
-            on_error: send_quiet
+            regex: '^(?P<time>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z) (?P<stream>stdout|stderr) (?P<logtag>[FP]) (?P<log>.*)'
+            parse_from: body
+            parse_to: attributes
+            timestamp:
+              parse_from: attributes.time
+              layout_type: gotime
+              layout: "2006-01-02T15:04:05.999999999Z"
+            severity:
+              parse_from: attributes.logtag
+              mapping:
+                F: error
+            on_error: drop
+            if: 'body matches "^\\d{4}-\\d{2}-\\d{2}T"'
 
           # Step 2: Try JSON parsing (conditional)
           # Only fires if body starts with "{"
           - type: json_parser
             id: json-parser
-            if: 'body startsWith "{"'
+            if: 'body matches "^\\{"'
             parse_from: body
             parse_to: attributes
             # Preserve all JSON keys as attributes
@@ -94,7 +106,7 @@ spec:
               layout: "2006-01-02T15:04:05.999999999Z"
             severity:
               parse_from: attributes.level
-            on_error: send_quiet
+            on_error: send
 
           # Step 3: Try glog regex parsing (conditional)
           # Matches: I0624 10:15:30.123456   12345 server.go:42] message
@@ -115,7 +127,7 @@ spec:
               parse_from: attributes.timestamp
               layout: "0102 15:04:05.000000"
               layout_type: gotime
-            on_error: send_quiet
+            on_error: send
 
           # Step 4: Try key=value parsing (conditional)
           # Fires if body contains at least 3 key=value pairs
@@ -126,14 +138,15 @@ spec:
             parse_to: attributes
             pair_delimiter: " "
             key_value_delimiter: "="
-            on_error: send_quiet
+            on_error: send
 
+          # Catch-all: fires when no upstream parser consumed the body.
+          # Always matches (regex .*) — safe as final fallback.
           - id: raw-fallback
             type: regex_parser
             regex: "^(?P<log>.*)$"
             parse_from: body
             parse_to: attributes
-            on_error: send_quiet
 
     # No extensions needed for MVP.
     # file_storage extension requires write access that the collector's
