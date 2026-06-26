@@ -1,0 +1,93 @@
+# Lakekeeper Helm chart values — homelab
+# Chart: oci://ghcr.io/lakekeeper/helm-charts/lakekeeper
+
+# Use core edition (no license required)
+lakekeeper:
+  edition: "core"
+
+catalog:
+  image:
+    repository: quay.io/lakekeeper/catalog
+    tag: latest
+    pullPolicy: Always
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Pass AWS/S3 config as environment variables
+  extraEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: tansu-secrets
+          key: s3-access-key
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tansu-secrets
+          key: s3-secret-key
+    - name: AWS_ENDPOINT
+      value: "https://s3.fr-par.scw.cloud"
+    - name: AWS_DEFAULT_REGION
+      value: "fr-par"
+    - name: AWS_EC2_METADATA_DISABLED
+      value: "true"
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    failureThreshold: 5
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 1
+    periodSeconds: 5
+    failureThreshold: 5
+
+  service:
+    type: ClusterIP
+    externalPort: 8181
+
+# Embedded PostgreSQL (managed by the chart)
+postgresql:
+  enabled: true
+  nameOverride: "lakekeeper-pg"
+
+  service:
+    port: 5432
+
+  userDatabase:
+    existingSecret: "lakekeeper-secrets"
+    password:
+      secretKey: "postgresql-password"
+
+  storage:
+    requestedSize: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+# Disable external database (using embedded)
+externalDatabase:
+  type: postgres
+
+# Secret backend — store encrypted secrets in Postgres
+secretBackend:
+  type: "Postgres"
+  postgres:
+    encryptionKeySecret: "lakekeeper-secrets"
+    encryptionKeySecretKey: "encryptionKey"
+
+# Authorization — allow all (homelab)
+authz:
+  backend: "allowall"
+
+# No auth in homelab
+auth: {}

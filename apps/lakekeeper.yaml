@@ -7,12 +7,18 @@ metadata:
     argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
-  source:
-    repoURL: https://github.com/manudiv16/homelab.git
-    targetRevision: main
-    path: infrastructure/lakekeeper
-    directory:
-      recurse: true
+  sources:
+    # Source 1: Official Lakekeeper Helm chart
+    - repoURL: oci://ghcr.io/lakekeeper/helm-charts
+      targetRevision: 0.9.0
+      chart: lakekeeper
+      helm:
+        valueFiles:
+          - $values/infrastructure/lakekeeper/values.yaml
+    # Source 2: Our repo with custom values
+    - repoURL: https://github.com/manudiv16/homelab.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
