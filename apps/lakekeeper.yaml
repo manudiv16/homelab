@@ -19,12 +19,7 @@ spec:
     - repoURL: https://github.com/manudiv16/homelab.git
       targetRevision: main
       ref: values
-    # Source 3: Our repo for local manifests (secrets)
-    - repoURL: https://github.com/manudiv16/homelab.git
-      targetRevision: main
-      path: infrastructure/lakekeeper
-      directory:
-        exclude: "values.yaml"
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
