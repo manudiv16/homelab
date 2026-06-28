@@ -94,7 +94,7 @@ data:
     CREATE TABLE normalized_logs_sink
     WITH (
         connector = 'iceberg',
-        catalog_uri = 'http://tansu-broker.monitoring.svc.cluster.local:8181',
+        catalog_uri = 'http://lakekeeper.monitoring.svc.cluster.local:8181/catalog',
         warehouse = 's3://logs/iceberg',
         namespace = 'logs',
         table_name = 'otel_logs_normalized'

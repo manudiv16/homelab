@@ -18,9 +18,9 @@ spec:
       containers:
         - name: arroyo
           # Pin to a specific tag after first successful deployment
-          image: ghcr.io/arroyosystems/arroyo:latest
+          image: ghcr.io/arroyosystems/arroyo:0.15.0
           ports:
-            - containerPort: 8000
+            - containerPort: 5115
               name: api
           resources:
             requests:
@@ -36,14 +36,14 @@ spec:
               mountPath: /etc/arroyo
           readinessProbe:
             httpGet:
-              path: /api/v1/status
-              port: 8000
+              path: /api/v1/ping
+              port: 5115
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/v1/status
-              port: 8000
+              path: /api/v1/ping
+              port: 5115
             initialDelaySeconds: 30
             periodSeconds: 30
       volumes:
