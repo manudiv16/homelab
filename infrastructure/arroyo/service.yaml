@@ -8,6 +8,6 @@ spec:
   selector:
     app.kubernetes.io/name: arroyo
   ports:
-    - port: 8000
-      targetPort: 8000
+    - port: 5115
+      targetPort: 5115
       name: api

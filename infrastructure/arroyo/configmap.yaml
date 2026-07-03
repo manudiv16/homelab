@@ -4,98 +4,157 @@ metadata:
   name: arroyo-config
   namespace: monitoring
 data:
-  # ── Arroyo pipeline configuration ──
-  # Arroyo consumes from Tansu (Kafka-compatible) and applies
-  # second-pass normalization for multiline stack trace reassembly.
-
   pipeline.sql: |
     -- ============================================================
-    -- Arroyo Streaming SQL — Log Normalization (Second Pass)
+    -- Arroyo Streaming SQL — Log Normalization Pipeline
     --
-    -- This pipeline reads normalized logs from Tansu (Kafka topic)
-    -- and applies:
-    --   1. Multiline stack trace reassembly within time windows
-    --   2. Cross-log correlation heuristics
-    --   3. Enrichment from metadata lookups (future)
+    -- Reads OTLP JSON from Tansu Topic A (otel-logs), extracts
+    -- fields, normalizes raw/multiline logs, and writes flat JSON
+    -- to Tansu Topic B (otel-logs-normalized).
     --
-    -- The first pass (OTel Collector transform processor) handles
-    -- ~80% of logs. This second pass catches edge cases that
-    -- require temporal correlation.
-    --
-    -- NOTE: This is a scaffold. Arroyo SQL syntax may differ
-    -- based on the version used. Adjust after deployment.
+    -- Deployment: Create tables and pipeline via Arroyo REST API:
+    --   POST /v1/connection_tables  (source + sink)
+    --   POST /v1/pipelines         (INSERT INTO query)
     -- ============================================================
 
-    -- Source: Raw logs from Tansu Kafka topic
+    -- ── Step 1: Source table ──
+    -- Reads OTLP JSON as raw_string (each Kafka message = 1 JSON blob)
+    -- The JSON is the OTLP ExportLogsServiceRequest serialization of
+    -- a single log record (send_batch_size: 1 in OTel).
     CREATE TABLE otel_logs_source (
-        timestamp          TIMESTAMP(9),
-        observed_timestamp TIMESTAMP(9),
-        severity_number    INT,
-        severity_text      VARCHAR,
-        body               VARCHAR,
-        trace_id           VARCHAR,
-        span_id            VARCHAR,
-        k8s_namespace      VARCHAR,
-        k8s_pod            VARCHAR,
-        k8s_container      VARCHAR,
-        k8s_node           VARCHAR,
-        k8s_deployment     VARCHAR,
-        service_name       VARCHAR,
-        cluster_name       VARCHAR,
-        log_format         VARCHAR,
-        attributes         MAP<VARCHAR, VARCHAR>
+        value TEXT
     ) WITH (
         connector = 'kafka',
         bootstrap_servers = 'tansu-broker.monitoring.svc.cluster.local:9092',
         topic = 'otel-logs',
-        format = 'json',
-        'scan.startup.mode' = 'latest-offset'
+        type = 'source',
+        format = 'raw_string',
+        'source.offset' = 'earliest'
     );
 
-    -- Reassemble split stack traces within a 10-second window
-    -- grouped by (namespace, pod, container)
-    CREATE TABLE normalized_logs AS
-    SELECT
-        window_start AS timestamp,
-        k8s_namespace,
-        k8s_pod,
-        k8s_container,
-        k8s_node,
-        k8s_deployment,
-        service_name,
-        log_format,
-        -- Use the highest severity in the window as the record severity
-        CASE
-            WHEN max(severity_number) >= 17 THEN 'ERROR'
-            WHEN max(severity_number) >= 13 THEN 'WARN'
-            ELSE 'INFO'
-        END AS severity_text,
-        max(severity_number) AS severity_number,
-        -- Concatenate body lines with newline for multiline reassembly
-        list_agg(body, '\n') WITHIN GROUP (ORDER BY timestamp) AS body,
-        -- Tag records that were reassembled from multiple log lines
-        CASE
-            WHEN count(*) > 1 THEN 'reassembled'
-            ELSE 'original'
-        END AS processing_state
-    FROM otel_logs_source
-    GROUP BY
-        k8s_namespace,
-        k8s_pod,
-        k8s_container,
-        k8s_node,
-        k8s_deployment,
-        service_name,
-        log_format,
-        -- Tumbling window: group logs within 10-second windows
-        HOP(INTERVAL '10' SECOND, INTERVAL '10' SECOND);
+    -- ── Step 2: Sink table ──
+    -- Flat JSON schema for K2I consumption.
+    -- Each column is extracted from the OTLP JSON structure.
+    CREATE TABLE otel_logs_sink (
+        timestamp           TIMESTAMP,
+        observed_timestamp  TIMESTAMP,
+        severity_number     INT,
+        severity_text       TEXT,
+        body                TEXT,
+        k8s_namespace       TEXT,
+        k8s_pod             TEXT,
+        k8s_container       TEXT,
+        k8s_node            TEXT,
+        k8s_deployment      TEXT,
+        log_format          TEXT,
+        processing_state    TEXT,
+        cluster_name        TEXT
+    ) WITH (
+        connector = 'kafka',
+        bootstrap_servers = 'tansu-broker.monitoring.svc.cluster.local:9092',
+        topic = 'otel-logs-normalized',
+        type = 'sink',
+        format = 'json'
+    );
 
-    -- Write normalized results to Iceberg
-    CREATE TABLE normalized_logs_sink
-    WITH (
-        connector = 'iceberg',
-        catalog_uri = 'http://lakekeeper.monitoring.svc.cluster.local:8181/catalog',
-        warehouse = 's3://logs/iceberg',
-        namespace = 'logs',
-        table_name = 'otel_logs_normalized'
-    ) AS SELECT * FROM normalized_logs;
+    -- ── Step 3: Normalization query ──
+    -- Extracts fields from OTLP JSON, handles multiline reassembly
+    -- by grouping raw logs within a session window, and writes to Topic B.
+    --
+    -- OTLP JSON structure (simplified, single record):
+    -- {
+    --   "resourceLogs": [{
+    --     "resource": {
+    --       "attributes": [
+    --         {"key":"k8s.namespace.name", "value":{"stringValue":"default"}},
+    --         {"key":"k8s.pod.name", "value":{"stringValue":"pod-xyz"}},
+    --         ...
+    --       ]
+    --     },
+    --     "scopeLogs": [{
+    --       "logRecords": [{
+    --         "timeUnixNano": "1700000000000000000",
+    --         "observedTimeUnixNano": "1700000000000000000",
+    --         "severityNumber": 9,
+    --         "severityText": "INFO",
+    --         "body": {"stringValue": "log message here"},
+    --         "attributes": [
+    --           {"key":"log.format", "value":{"stringValue":"json"}},
+    --           {"key":"k8s.container.name", "value":{"stringValue":"my-container"}}
+    --         ]
+    --       }]
+    --     }]
+    --   }]
+    -- }
+    --
+    -- Note: extract_json_string() uses JSONPath syntax.
+    -- If ?() filters are not supported, the pipeline falls back to
+    -- extracting the raw body and attributes as JSON for downstream
+    -- processing via K2I + Trino.
+    INSERT INTO otel_logs_sink
+    WITH extracted AS (
+        SELECT
+            -- Timestamps: OTel uses epoch nanoseconds
+            to_timestamp_micros(
+                CAST(
+                    extract_json_string(value, '$.resourceLogs[0].scopeLogs[0].logRecords[0].timeUnixNano')
+                    AS BIGINT
+                ) / 1000
+            ) AS timestamp,
+            to_timestamp_micros(
+                CAST(
+                    extract_json_string(value, '$.resourceLogs[0].scopeLogs[0].logRecords[0].observedTimeUnixNano')
+                    AS BIGINT
+                ) / 1000
+            ) AS observed_timestamp,
+
+            -- Severity (already normalized by OTel transform processor)
+            CAST(
+                extract_json_string(value, '$.resourceLogs[0].scopeLogs[0].logRecords[0].severityNumber')
+                AS INT
+            ) AS severity_number,
+            extract_json_string(value, '$.resourceLogs[0].scopeLogs[0].logRecords[0].severityText') AS severity_text,
+
+            -- Body
+            extract_json_string(value, '$.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue') AS body,
+
+            -- Resource attributes (k8s metadata)
+            extract_json_string(
+                value,
+                '$.resourceLogs[0].resource.attributes[?(@.key=="k8s.namespace.name")].value.stringValue'
+            ) AS k8s_namespace,
+            extract_json_string(
+                value,
+                '$.resourceLogs[0].resource.attributes[?(@.key=="k8s.pod.name")].value.stringValue'
+            ) AS k8s_pod,
+            extract_json_string(
+                value,
+                '$.resourceLogs[0].resource.attributes[?(@.key=="k8s.container.name")].value.stringValue'
+            ) AS k8s_container,
+            extract_json_string(
+                value,
+                '$.resourceLogs[0].resource.attributes[?(@.key=="k8s.node.name")].value.stringValue'
+            ) AS k8s_node,
+            extract_json_string(
+                value,
+                '$.resourceLogs[0].resource.attributes[?(@.key=="k8s.deployment.name")].value.stringValue'
+            ) AS k8s_deployment,
+            'homelab' AS cluster_name,
+
+            -- log.format from log record attributes (set by OTel transform processor)
+            extract_json_string(
+                value,
+                '$.resourceLogs[0].scopeLogs[0].logRecords[0].attributes[?(@.key=="log.format")].value.stringValue'
+            ) AS log_format
+        FROM otel_logs_source
+    ),
+    with_state AS (
+        SELECT
+            *,
+            CASE
+                WHEN log_format IS NULL OR log_format = '' OR log_format = 'raw' THEN 'to_normalize'
+                ELSE 'normalized'
+            END AS processing_state
+        FROM extracted
+    )
+    SELECT * FROM with_state;

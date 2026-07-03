@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k2i-config
+  namespace: monitoring
+data:
+  config.toml: |
+    # ============================================================
+    # K2I Configuration — Logs Pipeline
+    # ============================================================
+    # Consumes flat JSON from Tansu Topic B (otel-logs-normalized)
+    # and writes to Iceberg via Lakekeeper REST catalog.
+    #
+    # The JSON payload is stored as raw value in Iceberg.
+    # Field extraction happens at query time via Trino:
+    #   SELECT json_extract(kafka_value, '$.body') FROM ...
+    # ============================================================
+
+    [kafka]
+    bootstrap_servers = ["tansu-broker.monitoring.svc.cluster.local:9092"]
+    topic = "otel-logs-normalized"
+    consumer_group = "k2i-logs"
+    batch_size = 500
+    batch_timeout_ms = 3000
+    session_timeout_ms = 30000
+    heartbeat_interval_ms = 3000
+    max_poll_interval_ms = 300000
+    auto_offset_reset = "earliest"
+
+    [kafka.format]
+    # Store JSON payload as raw value with Kafka metadata columns
+    type = "json"
+
+    [iceberg]
+    catalog_type = "rest"
+    rest_uri = "http://lakekeeper.monitoring.svc.cluster.local:8181/catalog"
+    warehouse_path = "s3://local-logs/iceberg/"
+    database_name = "logs"
+    table_name = "otel_logs"
+    target_file_size_mb = 64
+    compression = "snappy"
+    s3_endpoint = "https://s3.fr-par.scw.cloud"
+    aws_region = "fr-par"
+
+    [[iceberg.partition_spec]]
+    source_field = "kafka_timestamp"
+    transform = "day"
+
+    [buffer]
+    ttl_seconds = 60
+    max_size_mb = 128
+    flush_interval_seconds = 30
+    flush_batch_size = 5000
+
+    [transaction_log]
+    log_dir = "/var/lib/k2i/txlog"
+    checkpoint_interval_entries = 10000
+    checkpoint_interval_seconds = 300
+    max_log_files = 10
+
+    [maintenance]
+    compaction_enabled = true
+    compaction_interval_seconds = 3600
+    compaction_threshold_mb = 32
+    compaction_target_mb = 64
+    snapshot_expiration_enabled = true
+    snapshot_retention_days = 3
+    orphan_cleanup_enabled = true
+    orphan_retention_days = 1
+
+    [monitoring]
+    metrics_port = 9090
+    health_port = 8080
+    log_level = "info"
+    log_format = "json"

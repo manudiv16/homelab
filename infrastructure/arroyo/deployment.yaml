@@ -19,9 +19,14 @@ spec:
         - name: arroyo
           # Pin to a specific tag after first successful deployment
           image: ghcr.io/arroyosystems/arroyo:0.15.0
+          args: ["cluster"]
           ports:
             - containerPort: 5115
               name: api
+            - containerPort: 5116
+              name: controller
+            - containerPort: 5117
+              name: compiler
           resources:
             requests:
               cpu: 100m

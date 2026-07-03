@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k2i
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: k2i
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k2i
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k2i
+    spec:
+      containers:
+        - name: k2i
+          image: ghcr.io/osodevops/k2i:v0.2.0
+          args: ["ingest", "--config", "/etc/k2i/config.toml"]
+          ports:
+            - containerPort: 8080
+              name: health
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tansu-secrets
+                  key: s3-secret-key
+          envFrom:
+            - secretRef:
+                name: tansu-secrets
+                optional: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /etc/k2i
+              readOnly: true
+            - name: txlog
+              mountPath: /var/lib/k2i/txlog
+      volumes:
+        - name: config
+          configMap:
+            name: k2i-config
+        - name: txlog
+          persistentVolumeClaim:
+            claimName: k2i-txlog
