@@ -34,9 +34,9 @@ catalog:
           name: tansu-secrets
           key: s3-secret-key
     - name: AWS_ENDPOINT
-      value: "https://s3.fr-par.scw.cloud"
+      value: "http://minio.minio.svc:9000"
     - name: AWS_DEFAULT_REGION
-      value: "fr-par"
+      value: "us-east-1"
     - name: AWS_EC2_METADATA_DISABLED
       value: "true"
 

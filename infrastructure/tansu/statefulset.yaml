@@ -18,19 +18,7 @@ spec:
         app.kubernetes.io/name: tansu
     spec:
       serviceAccountName: tansu-broker
-      # IPv6 fix: el cluster k3s no tiene routing IPv6. Scaleway S3 publica
-      # AAAA records y el cliente Rust hyper (Happy Eyeballs) intenta IPv6
-      # primero y queda bloqueado en timeout.
-      # hostAliases resuelve las 3 IPs IPv4 de s3.fr-par.scw.cloud directamente
-      # sin pasar por DNS, evitando el problema de forma simple y fiable.
-      # Si Scaleway rotase estas IPs se actualizan aquí (poco frecuente en CDN).
-      # El CoreDNS template (kube-system/coredns-custom) bloquea AAAA
-      # como defensa en profundidad para el resto del cluster.
-      # Una sola IP es suficiente — Scaleway usa anycast/CDN redundante.
-      # Las 3 IPs (51.159.62.18/19/20) pertenecen al mismo servicio.
-      hostAliases:
-        - ip: "51.159.62.18"
-          hostnames: ["s3.fr-par.scw.cloud"]
+      # MinIO local S3 backend — sin dependencia externa de Scaleway S3
       containers:
         - name: tansu
           image: ghcr.io/tansu-io/tansu:0.6.0
@@ -60,15 +48,11 @@ spec:
                   name: tansu-secrets
                   key: s3-secret-key
             - name: AWS_ENDPOINT
-              value: "https://s3.fr-par.scw.cloud"
+              value: "http://minio.minio.svc:9000"
             - name: AWS_DEFAULT_REGION
-              value: "fr-par"
+              value: "us-east-1"
             - name: AWS_ALLOW_HTTP
-              value: "false"
-            # Deshabilita el intento de obtener credenciales via IMDS (EC2
-            # instance metadata). Sin esto object_store tarda ~57s en agotar
-            # los reintentos al metadata service antes de usar las credenciales
-            # estáticas. TODO: eliminar cuando se configure IPv6 en k3s.
+              value: "true"
             - name: AWS_EC2_METADATA_DISABLED
               value: "true"
           resources:
