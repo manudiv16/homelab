@@ -17,26 +17,9 @@ spec:
       labels:
         app.kubernetes.io/name: k2i
     spec:
-      initContainers:
-        - name: k2i-init
-          image: alpine:3.20
-          command:
-            - sh
-            - -c
-            - |
-              apk add --no-cache curl tar
-              curl -fSL https://github.com/osodevops/k2i/releases/download/v0.2.0/k2i-cli-x86_64-unknown-linux-gnu.tar.xz \
-                -o /tmp/k2i.tar.xz
-              tar xf /tmp/k2i.tar.xz -C /k2i-bin/
-              chmod +x /k2i-bin/k2i
-          volumeMounts:
-            - name: k2i-binary
-              mountPath: /k2i-bin
       containers:
         - name: k2i
-          image: alpine:3.20
-          command:
-            - /k2i-bin/k2i
+          image: ghcr.io/osodevops/k2i:v0.2.0
           args: ["ingest", "--config", "/etc/k2i/config.toml"]
           ports:
             - containerPort: 8080
@@ -78,17 +61,12 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 30
           volumeMounts:
-            - name: k2i-binary
-              mountPath: /k2i-bin
-              readOnly: true
             - name: config
               mountPath: /etc/k2i
               readOnly: true
             - name: txlog
               mountPath: /var/lib/k2i/txlog
       volumes:
-        - name: k2i-binary
-          emptyDir: {}
         - name: config
           configMap:
             name: k2i-config
