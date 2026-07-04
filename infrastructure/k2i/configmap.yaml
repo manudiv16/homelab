@@ -41,6 +41,8 @@ data:
     compression = "snappy"
     s3_endpoint = "http://minio.minio.svc:9000"
     aws_region = "us-east-1"
+    aws_access_key_id = "minioadmin"
+    aws_secret_access_key = "minioadmin"
 
     [[iceberg.partition_spec]]
     source_field = "kafka_timestamp"
