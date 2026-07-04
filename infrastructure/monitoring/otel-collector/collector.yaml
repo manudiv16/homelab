@@ -109,15 +109,20 @@ spec:
             to: body
 
           # Clean up CRI-specific attributes before Kafka
+          # Non-CRI entries won't have these fields; on_error: send
+          # ensures they pass through without error.
           - type: remove
             id: clean-cri-attrs-time
             field: attributes.time
+            on_error: send
           - type: remove
             id: clean-cri-attrs-stream
             field: attributes.stream
+            on_error: send
           - type: remove
             id: clean-cri-attrs-logtag
             field: attributes.logtag
+            on_error: send
 
     # No extensions needed for MVP.
     # file_storage extension requires write access that the collector's
