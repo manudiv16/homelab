@@ -65,64 +65,14 @@ spec:
           container.cpu.usage:
             enabled: true
 
-      # ── New: filelog receiver for container logs ──
-      # Simplified: only strip CRI wrapper, send raw body to Kafka.
-      # All log normalization (JSON, glog, kv, etc.) is handled by
-      # the Arroyo pipeline, not here.
+      # ── filelog receiver: raw container logs → Kafka directo.
+      # Sin parsers ni transformaciones — todo lo hace Arroyo.
       filelog:
         include:
           - /var/log/containers/*.log
         exclude:
           - /var/log/containers/fluentbit-*.log
           - /var/log/containers/collector-daemonset-*.log
-        operators:
-          # Route entries — CRI lines to cri-parser, non-CRI passthrough
-          - type: router
-            id: cri-router
-            routes:
-              - output: cri-parser
-                expr: 'body matches "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z (stdout|stderr) . .+"'
-            default: extract-body-cri
-
-          # Parse CRI log format.
-          # Input:  "2026-06-24T10:15:30.123456789Z stdout F {\"level\":\"info\"}"
-          # Extracts: attributes.log = actual log content
-          - type: regex_parser
-            id: cri-parser
-            regex: '^(?P<time>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z) (?P<stream>stdout|stderr) (?P<logtag>.) (?P<log>.*)'
-            parse_from: body
-            parse_to: attributes
-            timestamp:
-              parse_from: attributes.time
-              layout_type: gotime
-              layout: "2006-01-02T15:04:05.999999999Z"
-            severity:
-              parse_from: attributes.logtag
-              mapping:
-                F: error
-
-          # Copy extracted log content to body (replaces full CRI line).
-          # For non-CRI entries, this is a no-op (field doesn't exist).
-          - type: copy
-            id: extract-body-cri
-            from: attributes.log
-            to: body
-
-          # Clean up CRI-specific attributes before Kafka.
-          # Only remove fields that exist (prevents errors for
-          # non-CRI entries).
-          - type: remove
-            id: clean-cri-attrs-time
-            if: 'attributes.time != nil'
-            field: attributes.time
-          - type: remove
-            id: clean-cri-attrs-stream
-            if: 'attributes.stream != nil'
-            field: attributes.stream
-          - type: remove
-            id: clean-cri-attrs-logtag
-            if: 'attributes.logtag != nil'
-            field: attributes.logtag
 
     # No extensions needed for MVP.
     # file_storage extension requires write access that the collector's
@@ -151,9 +101,6 @@ spec:
           - key: cluster.name
             value: homelab
             action: upsert
-
-      # ── Batch processor for logs (shared with metrics) ──
-      # Normalization is handled downstream by Arroyo. OTel only ships raw logs.
 
     exporters:
       # ── Existing exporter (metrics → gateway, unchanged) ──
