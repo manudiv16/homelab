@@ -66,34 +66,27 @@ spec:
             enabled: true
 
       # ── New: filelog receiver for container logs ──
+      # Simplified: only strip CRI wrapper, send raw body to Kafka.
+      # All log normalization (JSON, glog, kv, etc.) is handled by
+      # the Arroyo pipeline, not here.
       filelog:
         include:
           - /var/log/containers/*.log
         exclude:
           - /var/log/containers/fluentbit-*.log
           - /var/log/containers/collector-daemonset-*.log
-        # NOTE: multiline disabled — when combined with the container operator,
-        # continuation lines break the CRI format regex, causing parse errors.
-        # The container operator bug (GH#41508) ignores on_error for unrecognized
-        # formats, so multiline + container = spam. Multiline will be handled
-        # downstream by a recombine processor in the pipeline.
-        # multiline:
-        #   line_start_pattern: '^(\d{4}-\d{2}-\d{2}|[IWEF]\d{4}|Traceback|panic|goroutine \d+)'
         operators:
-          # Step 1: Route entries — CRI lines to cri-parser, everything else
-          # skips it entirely (avoids regex_parser errors for non-CRI lines).
+          # Route entries — CRI lines to cri-parser, non-CRI passthrough
           - type: router
             id: cri-router
             routes:
               - output: cri-parser
                 expr: 'body matches "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z (stdout|stderr) . .+"'
-            default: json-parser
+            default: extract-body-cri
 
-          # Step 1a: Parse CRI log format (only reached via router for CRI lines).
+          # Parse CRI log format.
           # Input:  "2026-06-24T10:15:30.123456789Z stdout F {\"level\":\"info\"}"
-          # Output: body = "{\"level\":\"info\"}"
-          #         attributes["log.iostream"] = "stdout"
-          #         time = 2026-06-24T10:15:30.123456789Z
+          # Extracts: attributes.log = actual log content
           - type: regex_parser
             id: cri-parser
             regex: '^(?P<time>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z) (?P<stream>stdout|stderr) (?P<logtag>.) (?P<log>.*)'
@@ -108,62 +101,23 @@ spec:
               mapping:
                 F: error
 
-          # Step 2: Try JSON parsing (conditional)
-          # Only fires if body starts with "{"
-          - type: json_parser
-            id: json-parser
-            if: 'body matches "^\\{"'
-            parse_from: body
-            parse_to: attributes
-            # Preserve all JSON keys as attributes
-            # The transform processor will extract severity, timestamp, etc.
-            timestamp:
-              parse_from: attributes.timestamp
-              layout_type: gotime
-              layout: "2006-01-02T15:04:05.999999999Z"
-            severity:
-              parse_from: attributes.level
-            on_error: send
+          # Copy extracted log content to body (replaces full CRI line).
+          # For non-CRI entries, this is a no-op (field doesn't exist).
+          - type: copy
+            id: extract-body-cri
+            from: attributes.log
+            to: body
 
-          # Step 3: Try glog regex parsing (conditional)
-          # Matches: I0624 10:15:30.123456   12345 server.go:42] message
-          - type: regex_parser
-            id: glog-parser
-            if: 'body matches "^([IWEF])\\d{4} \\d{2}:\\d{2}:\\d{2}\\."'
-            regex: '^(?P<severity_letter>[IWEF])(?P<timestamp>\d{4} \d{2}:\d{2}:\d{2}\.\d+)\s+(?P<thread_id>\d+)\s+(?P<source_file>[^:]+):(?P<source_line>\d+)\]\s*(?P<message>.*)$'
-            parse_from: body
-            parse_to: attributes
-            severity:
-              parse_from: attributes.severity_letter
-              mapping:
-                I: info
-                W: warn
-                E: error
-                F: fatal
-            timestamp:
-              parse_from: attributes.timestamp
-              layout: "0102 15:04:05.000000"
-              layout_type: gotime
-            on_error: send
-
-          # Step 4: Try key=value parsing (conditional)
-          # Fires if body contains at least 3 key=value pairs
-          - type: key_value_parser
-            id: kv-parser
-            if: 'body matches "\\w+=\\S+.*\\w+=\\S+.*\\w+=\\S+"'
-            parse_from: body
-            parse_to: attributes
-            pair_delimiter: " "
-            key_value_delimiter: "="
-            on_error: send
-
-          # Catch-all: fires when no upstream parser consumed the body.
-          # Always matches (regex .*) — safe as final fallback.
-          - id: raw-fallback
-            type: regex_parser
-            regex: "^(?P<log>.*)$"
-            parse_from: body
-            parse_to: attributes
+          # Clean up CRI-specific attributes before Kafka
+          - type: remove
+            id: clean-cri-attrs-time
+            field: attributes.time
+          - type: remove
+            id: clean-cri-attrs-stream
+            field: attributes.stream
+          - type: remove
+            id: clean-cri-attrs-logtag
+            field: attributes.logtag
 
     # No extensions needed for MVP.
     # file_storage extension requires write access that the collector's
@@ -193,56 +147,8 @@ spec:
             value: homelab
             action: upsert
 
-      # ── New: transform processor for log normalization ──
-      # Simplified OTTL to avoid syntax issues with opentelemetry-collector-contrib 0.123.0
-      transform/normalize-logs:
-        log_statements:
-          # ── Format detection ──
-          - context: log
-            statements:
-              - set(log.attributes["log.format"], "text")
-              - set(log.attributes["log.format"], "json") where IsMatch(log.body, "^\\{")
-              - set(log.attributes["log.format"], "keyvalue") where log.attributes["ts"] != nil
-
-          # ── Severity normalization ──
-          - context: log
-            statements:
-              - set(log.severity_number, 9) where log.severity_number == nil
-              - set(log.severity_text, "INFO") where log.severity_text == nil
-              - set(log.severity_number, 5) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)debug")
-              - set(log.severity_text, "DEBUG") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)debug")
-              - set(log.severity_number, 13) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)warn")
-              - set(log.severity_text, "WARN") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)warn")
-              - set(log.severity_number, 17) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)err")
-              - set(log.severity_text, "ERROR") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)err")
-              - set(log.severity_number, 21) where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)fatal")
-              - set(log.severity_text, "FATAL") where log.attributes["level"] != nil and IsMatch(log.attributes["level"], "(?i)fatal")
-
-          # ── Body cleanup ──
-          - context: log
-            statements:
-              - set(log.body, log.attributes["msg"]) where log.attributes["msg"] != nil
-              - set(log.body, log.attributes["message"]) where log.attributes["message"] != nil and log.body == nil
-
-          # ── Attribute cleanup ──
-          - context: log
-            statements:
-              - delete_key(log.attributes, "severity_letter")
-              - delete_key(log.attributes, "log.iostream")
-              - delete_key(log.attributes, "logtag")
-
-          - context: log
-            statements:
-              - set(log.attributes["log.format"], "raw") where log.attributes["log.format"] == nil
-              - set(log.severity_number, 9) where log.severity_number == nil
-              - set(log.severity_text, "INFO") where log.severity_text == nil
-              - set(log.body, log.attributes["log"]) where log.attributes["log"] != nil and log.body == ""
-
-      # ── New: batch processor specifically for logs ──
-      batch/logs:
-        timeout: 5s
-        send_batch_size: 1
-        send_batch_max_size: 1
+      # ── Batch processor for logs (shared with metrics) ──
+      # Normalization is handled downstream by Arroyo. OTel only ships raw logs.
 
     exporters:
       # ── Existing exporter (metrics → gateway, unchanged) ──
@@ -289,7 +195,7 @@ spec:
             - batch
           exporters:
             - otlp
-        # New logs pipeline
+        # New logs pipeline — minimal: ship raw, normalize in Arroyo
         logs:
           receivers:
             - filelog
@@ -297,8 +203,7 @@ spec:
             - memory_limiter
             - k8sattributes
             - resource/cluster
-            - transform/normalize-logs
-            - batch/logs
+            - batch
           exporters:
             - kafka/tansu
       telemetry:
