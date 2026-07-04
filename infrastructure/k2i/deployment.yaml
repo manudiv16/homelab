@@ -42,6 +42,8 @@ spec:
               value: "http://minio.minio.svc:9000"
             - name: AWS_DEFAULT_REGION
               value: "us-east-1"
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
           resources:
             requests:
               cpu: 100m
