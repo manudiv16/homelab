@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: k2i
-          image: ghcr.io/osodevops/k2i:v0.2.0
+          image: manudiv1/k2i:v0.2.0
           args: ["ingest", "--config", "/etc/k2i/config.toml"]
           ports:
             - containerPort: 8080
