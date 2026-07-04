@@ -39,8 +39,8 @@ data:
     table_name = "otel_logs"
     target_file_size_mb = 64
     compression = "snappy"
-    s3_endpoint = "https://s3.fr-par.scw.cloud"
-    aws_region = "fr-par"
+    s3_endpoint = "http://minio.minio.svc:9000"
+    aws_region = "us-east-1"
 
     [[iceberg.partition_spec]]
     source_field = "kafka_timestamp"
