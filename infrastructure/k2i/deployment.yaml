@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: k2i
-          image: manudiv1/k2i:v0.2.0
+          image: manudiv1/k2i:v0.2.1
           imagePullPolicy: Always
           args: ["ingest", "--config", "/etc/k2i/config.toml"]
           ports:
