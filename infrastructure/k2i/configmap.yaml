@@ -19,7 +19,7 @@ data:
     [kafka]
     bootstrap_servers = ["tansu-broker.monitoring.svc.cluster.local:9092"]
     topic = "otel-logs-normalized"
-    consumer_group = "k2i-logs"
+    consumer_group = "k2i-logs-v2"
     batch_size = 500
     batch_timeout_ms = 3000
     session_timeout_ms = 30000
