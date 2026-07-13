@@ -61,6 +61,8 @@ spec:
               port: 9000
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 5
       volumes:
         - name: data
           persistentVolumeClaim:

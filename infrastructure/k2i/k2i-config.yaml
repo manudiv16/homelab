@@ -6,14 +6,10 @@ metadata:
 data:
   config.toml: |
     # ============================================================
-    # K2I Configuration — Logs Pipeline
+    # K2I Configuration — MinIO Warehouse (Local)
     # ============================================================
-    # Consumes flat JSON from Tansu Topic B (otel-logs-normalized)
-    # and writes to Iceberg via Lakekeeper REST catalog.
-    #
-    # The JSON payload is stored as raw value in Iceberg.
-    # Field extraction happens at query time via Trino:
-    #   SELECT json_extract(kafka_value, '$.body') FROM ...
+    # Writes to MinIO via Lakekeeper REST catalog
+    # Warehouse: s3://local-logs/iceberg (MinIO)
     # ============================================================
 
     [kafka]
@@ -28,7 +24,6 @@ data:
     auto_offset_reset = "earliest"
 
     [kafka.format]
-    # Store JSON payload as raw value with Kafka metadata columns
     type = "json"
 
     [iceberg]
@@ -41,8 +36,6 @@ data:
     compression = "snappy"
     s3_endpoint = "http://minio.minio.svc:9000"
     aws_region = "us-east-1"
-    aws_access_key_id = "minioadmin"
-    aws_secret_access_key = "minioadmin"
 
     [[iceberg.partition_spec]]
     source_field = "kafka_timestamp"

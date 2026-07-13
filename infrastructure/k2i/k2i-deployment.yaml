@@ -19,14 +19,12 @@ spec:
     spec:
       containers:
         - name: k2i
-          image: manudiv1/k2i:v0.2.1
+          image: ghcr.io/osodevops/k2i:v0.2.2
           imagePullPolicy: Always
-          args: ["ingest", "--config", "/etc/k2i/config.toml"]
-          ports:
-            - containerPort: 8080
-              name: health
-            - containerPort: 9090
-              name: metrics
+          args:
+            - ingest
+            - --config
+            - /etc/k2i/config.toml
           env:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
@@ -38,10 +36,29 @@ spec:
                 secretKeyRef:
                   name: tansu-secrets
                   key: s3-secret-key
-            - name: AWS_ENDPOINT
-              value: "http://minio.minio.svc:9000"
             - name: AWS_DEFAULT_REGION
-              value: "us-east-1"
+              value: us-east-1
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
           resources:
             requests:
               cpu: 100m
@@ -49,18 +66,6 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-          readinessProbe:
-            httpGet:
-              path: /readyz
-              port: health
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: health
-            initialDelaySeconds: 30
-            periodSeconds: 30
           volumeMounts:
             - name: config
               mountPath: /etc/k2i
