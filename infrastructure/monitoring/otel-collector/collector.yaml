@@ -109,14 +109,15 @@ spec:
         tls:
           insecure: true
 
-      # ── New exporter: logs → Tansu (via Kafka) ──
-      # Tansu es un broker Kafka-compatible, no recibe OTLP directo.
-      # El kafkaexporter escribe al topic 'otel-logs' en Tansu.
+      # ── Logs exporter: OTLP Protobuf → Tansu (Kafka) ──
+      # OTel exporta logs en formato OTLP Protobuf nativo al topic 'otel-logs'.
+      # El normalizer consume de este topic, aplana los registros y escribe
+      # Protobuf plano a otro topic para que k2i lo cargue con schema tipado.
       kafka/tansu:
         brokers:
           - tansu-broker:9092
         topic: otel-logs
-        encoding: otlp_json
+        encoding: otlp_proto
         protocol_version: 2.0.0
         metadata:
           retry:
@@ -147,7 +148,7 @@ spec:
             - batch
           exporters:
             - otlp
-        # New logs pipeline — minimal: ship raw, normalize in Arroyo
+        # Logs pipeline — OTLP Protobuf → Tansu → normalizer → k2i
         logs:
           receivers:
             - filelog
